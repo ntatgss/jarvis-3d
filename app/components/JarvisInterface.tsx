@@ -11,8 +11,96 @@ interface Message {
   timestamp: Date;
 }
 
-// Welcome message that Jarvis will display and speak
-const WELCOME_MESSAGE = "Hello! I'm Jarvis. How are you today?";
+// Component to help initialize audio on iOS
+const IOSAudioUnlock = () => {
+  const [isIOS, setIsIOS] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  
+  useEffect(() => {
+    // Check if this is iOS
+    if (typeof navigator !== 'undefined') {
+      const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      setIsIOS(isIOSDevice);
+    }
+  }, []);
+  
+  const unlockAudio = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        // Create and play a silent audio context
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        const audioCtx = new AudioContext();
+        console.log('iOS audio context state:', audioCtx.state);
+        
+        // Create a silent oscillator
+        const oscillator = audioCtx.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+        
+        // Connect to audio output
+        oscillator.connect(audioCtx.destination);
+        
+        // Play for a very short time
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.01);
+        
+        // Resume audio context if suspended
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        
+        // Also unblock speech synthesis
+        if (window.speechSynthesis) {
+          // Create a short utterance
+          const unblockUtterance = new SpeechSynthesisUtterance('');
+          unblockUtterance.volume = 0; // Silent
+          unblockUtterance.rate = 1;
+          window.speechSynthesis.speak(unblockUtterance);
+        }
+        
+        console.log('iOS audio unlocked');
+        setAudioUnlocked(true);
+      } catch (e) {
+        console.error('Error unlocking iOS audio:', e);
+      }
+    }
+  };
+  
+  if (!isIOS || audioUnlocked) return null;
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '10px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      color: 'white',
+      padding: '10px 15px',
+      borderRadius: '20px',
+      fontSize: '14px',
+      zIndex: 1000
+    }}>
+      <button 
+        onClick={unlockAudio}
+        style={{
+          backgroundColor: '#0066ff',
+          color: 'white',
+          border: 'none',
+          padding: '8px 15px',
+          borderRadius: '15px',
+          fontWeight: 'bold',
+          cursor: 'pointer'
+        }}
+      >
+        Tap to enable Jarvis voice
+      </button>
+    </div>
+  );
+};
+
+// No welcome message - user will start first
+// const WELCOME_MESSAGE = "Hello! I'm Jarvis. How are you today?";
 
 export default function JarvisInterface() {
   const [isListening, setIsListening] = useState(false);
@@ -21,7 +109,7 @@ export default function JarvisInterface() {
   const [, setJarvisResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasGreeted, setHasGreeted] = useState(false);
+  const [hasGreeted, setHasGreeted] = useState(true); // Set to true to prevent greeting
   
   // Conversation history
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
@@ -65,41 +153,6 @@ export default function JarvisInterface() {
   
   // Store the speak function in a ref
   speakRef.current = speak;
-  
-  // Speak welcome message when component mounts
-  useEffect(() => {
-    // Add a short delay to make sure the speech synthesis is initialized
-    const welcomeTimer = setTimeout(() => {
-      if (!hasGreeted && speakRef.current) {
-        console.log("Speaking welcome message:", WELCOME_MESSAGE);
-        
-        // Add Jarvis welcome message to conversation history
-        const assistantMsg: Message = {
-          role: 'assistant',
-          content: WELCOME_MESSAGE,
-          timestamp: new Date()
-        };
-        
-        setConversationHistory(prev => [...prev, assistantMsg]);
-        setJarvisResponse(WELCOME_MESSAGE); // Set response so UI updates
-        
-        try {
-          // Use a small additional delay to ensure voice synthesis is ready
-          setTimeout(() => {
-            if (speakRef.current) {
-              speakRef.current(WELCOME_MESSAGE);
-            }
-          }, 500);
-        } catch (error) {
-          console.error("Error speaking welcome message:", error);
-        }
-        
-        setHasGreeted(true);
-      }
-    }, 1500); // Increased delay for better initialization
-    
-    return () => clearTimeout(welcomeTimer);
-  }, [hasGreeted, conversationHistory.length]);
   
   // Replacing the useEffect event handlers with direct onClick handlers
   useEffect(() => {
@@ -315,6 +368,7 @@ export default function JarvisInterface() {
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden relative">
+      <IOSAudioUnlock />
       {/* Animated background elements */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[5%] w-[40%] h-[40%] bg-gradient-radial from-[#001e4d20] to-transparent rounded-full mix-blend-overlay animate-pulse-slow"></div>
@@ -413,6 +467,30 @@ export default function JarvisInterface() {
           <div className="md:hidden chat-expand-hint">
             <span>Tap to chat with Jarvis</span>
           </div>
+          
+          {/* iOS Voice Test Button */}
+          {(!hasGreeted && !isListening && !isSpeaking && !loading) && (
+            <div className="mb-2 p-2 text-center">
+              <button
+                onClick={() => {
+                  if (speakRef.current) {
+                    console.log("Testing Jarvis voice...");
+                    try {
+                      speakRef.current("Jarvis voice system test. I am now online.");
+                    } catch (error) {
+                      console.error("Error in test speech:", error);
+                    }
+                  }
+                }}
+                className="bg-green-600/90 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg shadow-green-500/20 hover:bg-green-500"
+              >
+                Test Jarvis Voice
+              </button>
+              <div className="text-xs text-gray-400 mt-1">
+                iOS users: Tap this first to enable voice
+              </div>
+            </div>
+          )}
           
           {/* Desktop chat header - only visible when minimized on desktop */}
           <div className="desktop-chat-header hidden">

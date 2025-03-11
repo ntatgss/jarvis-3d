@@ -148,7 +148,7 @@ export default function useVoiceRecognition({
         }
       }
     };
-  }, [sendFinalTranscript, recognition]);
+  }, [sendFinalTranscript]);
 
   // Function to start listening
   const startListening = useCallback(() => {
@@ -214,9 +214,26 @@ export default function useVoiceRecognition({
           // Create the simplest possible utterance
           const iosUtterance = new SpeechSynthesisUtterance(text);
           
+          // Try to find a voice - log all available voices for debugging
+          const availableVoices = window.speechSynthesis.getVoices();
+          console.log(`iOS available voices: ${availableVoices.length}`);
+          if (availableVoices.length > 0) {
+            console.log('iOS voices:');
+            availableVoices.forEach((voice, index) => {
+              console.log(`Voice ${index}: ${voice.name}, Lang: ${voice.lang}, Default: ${voice.default}`);
+            });
+            
+            // Try to use an English voice if available
+            const englishVoice = availableVoices.find(v => v.lang.startsWith('en'));
+            if (englishVoice) {
+              console.log(`Using iOS English voice: ${englishVoice.name}`);
+              iosUtterance.voice = englishVoice;
+            }
+          }
+          
           // Basic settings - no frills
           iosUtterance.volume = 1.0;  // Maximum volume
-          iosUtterance.rate = 1.0;    // Default rate
+          iosUtterance.rate = 0.9;    // Slightly slower rate for iOS
           
           // Critical: Set onend and onerror handlers
           iosUtterance.onend = () => {
@@ -235,6 +252,8 @@ export default function useVoiceRecognition({
             try {
               const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
               const audioCtx = new AudioContextClass();
+              console.log('iOS Audio context state:', audioCtx.state);
+              
               const oscillator = audioCtx.createOscillator();
               oscillator.type = 'sine';
               oscillator.frequency.setValueAtTime(500, audioCtx.currentTime);
@@ -264,9 +283,24 @@ export default function useVoiceRecognition({
             
             // iOS often needs another nudge after a short delay
             setTimeout(() => {
+              // Check if we're still paused or pending
+              const speechState = {
+                paused: window.speechSynthesis.paused,
+                pending: window.speechSynthesis.pending,
+                speaking: window.speechSynthesis.speaking
+              };
+              console.log('iOS speech state after 250ms:', speechState);
+              
               if (window.speechSynthesis.paused) {
                 console.log('Speech synthesis was paused, resuming');
                 window.speechSynthesis.resume();
+              }
+              
+              // Force another pause/resume cycle if needed
+              if (!window.speechSynthesis.speaking && window.speechSynthesis.pending) {
+                console.log('Speech not started yet, trying pause/resume cycle');
+                window.speechSynthesis.pause();
+                setTimeout(() => window.speechSynthesis.resume(), 50);
               }
             }, 250);
           }, 100);
@@ -317,11 +351,22 @@ export default function useVoiceRecognition({
         };
         
         utterance.onerror = (event) => {
-          console.error('Speech synthesis error:', {
-            error: event.error,
-            name: event.name,
-            type: event.type
-          });
+          // More defensive error logging that works across browsers
+          const errorDetails: Record<string, any> = {};
+          
+          // Safely extract properties
+          try {
+            if (event.hasOwnProperty('error')) errorDetails['error'] = event.error;
+            if (event.hasOwnProperty('name')) errorDetails['name'] = event.name;
+            if (event.hasOwnProperty('type')) errorDetails['type'] = event.type;
+          } catch (e) {
+            // If accessing properties fails, just log a simpler message
+          }
+          
+          // Log the error with whatever details we could extract
+          console.error('Speech synthesis error:', errorDetails);
+          
+          // Always ensure we update the speaking state
           onSpeakingChangeRef.current(false);
         };
         
