@@ -27,12 +27,14 @@ interface VoiceRecognitionProps {
   onTranscript: (text: string) => void;
   onListeningChange: (isListening: boolean) => void;
   onSpeakingChange: (isSpeaking: boolean) => void;
+  preferredGender?: 'male' | 'female';
 }
 
 export default function useVoiceRecognition({ 
   onTranscript, 
   onListeningChange, 
-  onSpeakingChange 
+  onSpeakingChange,
+  preferredGender = 'male'
 }: VoiceRecognitionProps) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -193,6 +195,50 @@ export default function useVoiceRecognition({
     }
   }, [recognition]);
 
+  // Function to find the best voice based on gender preference
+  const findVoiceByGender = useCallback((voices: SpeechSynthesisVoice[], gender: 'male' | 'female') => {
+    console.log(`Looking for ${gender} voice among ${voices.length} voices`);
+    
+    // Keywords that might indicate gender in voice names
+    const maleKeywords = ['male', 'guy', 'man', 'boy', 'david', 'james', 'tom', 'daniel'];
+    const femaleKeywords = ['female', 'woman', 'girl', 'lady', 'samantha', 'victoria', 'linda', 'karen', 'lisa'];
+    
+    // First try to find a voice that explicitly mentions the gender
+    const keywords = gender === 'male' ? maleKeywords : femaleKeywords;
+    
+    // Try to find a voice with the gender keyword in English
+    let voice = voices.find(v => 
+      v.lang.startsWith('en') && keywords.some(keyword => 
+        v.name.toLowerCase().includes(keyword)
+      )
+    );
+    
+    // If no match, look for any language with the gender
+    if (!voice) {
+      voice = voices.find(v => 
+        keywords.some(keyword => v.name.toLowerCase().includes(keyword))
+      );
+    }
+    
+    // If still no match, fallback to any English voice
+    if (!voice) {
+      voice = voices.find(v => v.lang.startsWith('en'));
+    }
+    
+    // Last resort: just use the first voice
+    if (!voice && voices.length > 0) {
+      voice = voices[0];
+    }
+    
+    if (voice) {
+      console.log(`Selected ${gender} voice:`, voice.name);
+    } else {
+      console.log(`No suitable ${gender} voice found`);
+    }
+    
+    return voice;
+  }, []);
+
   // Text-to-speech function
   const speak = useCallback((text: string) => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -223,11 +269,18 @@ export default function useVoiceRecognition({
               console.log(`Voice ${index}: ${voice.name}, Lang: ${voice.lang}, Default: ${voice.default}`);
             });
             
-            // Try to use an English voice if available
-            const englishVoice = availableVoices.find(v => v.lang.startsWith('en'));
-            if (englishVoice) {
-              console.log(`Using iOS English voice: ${englishVoice.name}`);
-              iosUtterance.voice = englishVoice;
+            // Find voice based on gender preference for iOS
+            const preferredVoice = findVoiceByGender(availableVoices, preferredGender);
+            if (preferredVoice) {
+              console.log(`Using iOS ${preferredGender} voice:`, preferredVoice.name);
+              iosUtterance.voice = preferredVoice;
+            } else {
+              // Fallback to any English voice if gender-specific not found
+              const englishVoice = availableVoices.find(v => v.lang.startsWith('en'));
+              if (englishVoice) {
+                console.log(`Using iOS English voice:`, englishVoice.name);
+                iosUtterance.voice = englishVoice;
+              }
             }
           }
           
@@ -321,24 +374,11 @@ export default function useVoiceRecognition({
         const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
         console.log(`Available voices: ${availableVoices.length}`);
         
-        // Try to find a good voice
-        let preferredVoice = availableVoices.find(voice => 
-          voice.name.includes('Google') && voice.lang.startsWith('en')
-        );
-        
-        if (!preferredVoice) {
-          preferredVoice = availableVoices.find(voice => 
-            voice.lang.startsWith('en') && (voice.name.includes('Male') || voice.name.includes('English'))
-          );
-        }
-        
-        if (!preferredVoice && availableVoices.length > 0) {
-          // Fallback to any English voice
-          preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
-        }
+        // Find voice based on gender preference
+        const preferredVoice = findVoiceByGender(availableVoices, preferredGender);
         
         if (preferredVoice) {
-          console.log('Using voice:', preferredVoice.name);
+          console.log(`Using ${preferredGender} voice:`, preferredVoice.name);
           utterance.voice = preferredVoice;
         } else if (availableVoices.length > 0) {
           console.log('Using default voice:', availableVoices[0].name);
@@ -390,7 +430,7 @@ export default function useVoiceRecognition({
       console.error('Speech synthesis not supported in this browser');
       onSpeakingChangeRef.current(false);
     }
-  }, [voices]);
+  }, [voices, findVoiceByGender, preferredGender]);
 
   return {
     isListening,

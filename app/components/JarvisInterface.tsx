@@ -110,6 +110,7 @@ export default function JarvisInterface() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasGreeted, setHasGreeted] = useState(true); // Set to true to prevent greeting
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('male'); // Default to male voice
   
   // Conversation history
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
@@ -140,7 +141,7 @@ export default function JarvisInterface() {
     setIsSpeaking(isSpeaking);
   }, []);
   
-  // Get voice recognition functions
+  // Get voice recognition functions with gender preference
   const { 
     startListening, 
     stopListening, 
@@ -148,7 +149,8 @@ export default function JarvisInterface() {
   } = useVoiceRecognition({
     onTranscript,
     onListeningChange,
-    onSpeakingChange
+    onSpeakingChange,
+    preferredGender: voiceGender
   });
   
   // Store the speak function in a ref
@@ -366,6 +368,12 @@ export default function JarvisInterface() {
     };
   }, []);
 
+  // Toggle voice gender
+  const toggleVoiceGender = useCallback(() => {
+    setVoiceGender(prev => prev === 'male' ? 'female' : 'male');
+    console.log(`Voice gender switched to ${voiceGender === 'male' ? 'female' : 'male'}`);
+  }, [voiceGender]);
+
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden relative">
       <IOSAudioUnlock />
@@ -411,6 +419,27 @@ export default function JarvisInterface() {
         <div className="absolute top-4 left-4 z-10">
           <h1 className="text-2xl font-bold text-blue-400 drop-shadow-lg">Jarvis 3D</h1>
           <p className="text-gray-400 text-sm">Voice-Activated AI Assistant</p>
+          
+          {/* Voice gender toggle - directly below title */}
+          <button 
+            onClick={toggleVoiceGender}
+            className="mt-2 bg-blue-600/80 hover:bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 shadow-lg"
+            title={`Switch to ${voiceGender === 'male' ? 'female' : 'male'} voice`}
+          >
+            <span>
+              {voiceGender === 'male' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
+                  <path d="M12 8.25a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5a.75.75 0 01.75-.75z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M12 1.5a6.75 6.75 0 01.75 13.5c1.777 0 3.384.694 4.588 1.826a7.5 7.5 0 11-10.676 0A6.78 6.78 0 0112 15a6.75 6.75 0 010-13.5zM12 15.75c-2.34 0-4.277 1.828-4.5 4.15v.003l-.001.006v.008l-.001.01v.04c0 .068-.001.156.004.256.007.131.022.301.05.489.05.339.143.693.29.999.149.312.36.585.644.78A1.5 1.5 0 009 22.5h6a1.5 1.5 0 00.514-.07c.285-.195.496-.468.645-.78.147-.307.24-.661.29-1 .027-.188.043-.358.05-.489.004-.1.003-.188.003-.256v-.04c0-.003 0-.007-.002-.01v-.008l-.001-.006-.001-.003C15.723 17.328 14.139 15.75 12 15.75z" clipRule="evenodd" />
+                </svg>
+              )}
+            </span>
+            <span>{voiceGender === 'male' ? 'Male Voice' : 'Female Voice'}</span>
+          </button>
         </div>
       </div>
       
@@ -476,7 +505,7 @@ export default function JarvisInterface() {
                   if (speakRef.current) {
                     console.log("Testing Jarvis voice...");
                     try {
-                      speakRef.current("Jarvis voice system test. I am now online.");
+                      speakRef.current(`Jarvis voice system test with ${voiceGender} voice. I am now online.`);
                     } catch (error) {
                       console.error("Error in test speech:", error);
                     }
@@ -484,7 +513,7 @@ export default function JarvisInterface() {
                 }}
                 className="bg-green-600/90 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg shadow-green-500/20 hover:bg-green-500"
               >
-                Test Jarvis Voice
+                Test {voiceGender === 'male' ? 'Male' : 'Female'} Voice
               </button>
               <div className="text-xs text-gray-400 mt-1">
                 iOS users: Tap this first to enable voice
