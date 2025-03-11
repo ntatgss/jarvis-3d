@@ -199,42 +199,68 @@ export default function useVoiceRecognition({
       console.log('Speaking:', text);
       onSpeakingChangeRef.current(true);
       
+      // Enhanced browser detection for iOS Safari
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      const isiOSSafari = isSafari && isiOS;
+      
+      console.log(`Browser detected: ${isiOSSafari ? 'iOS Safari' : isSafari ? 'Desktop Safari' : 'Other'}`);
+      
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
       
-      // Safari voice handling requires special care
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      console.log(`Browser detected: ${isSafari ? 'Safari' : 'Other'}`);
+      // iOS often works better with slower rate and higher volume
+      if (isiOSSafari) {
+        utterance.rate = 0.9;
+        utterance.volume = 1.0;
+        utterance.pitch = 1.1;
+      } else {
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+      }
       
       // Improved voice selection with better logging
-      const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
+      let availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
       console.log(`Available voices: ${availableVoices.length}`);
       
-      if (availableVoices.length === 0 && isSafari) {
-        // Safari sometimes needs a little nudge to load voices
-        console.log('No voices available in Safari, attempting to reload voices');
-        setTimeout(() => {
-          const safariVoices = window.speechSynthesis.getVoices();
-          console.log(`Safari voices after reload: ${safariVoices.length}`);
-          if (safariVoices.length > 0) {
-            // Update the utterance with a voice
-            utterance.voice = safariVoices.find(v => v.lang.startsWith('en')) || safariVoices[0];
-            console.log(`Using Safari voice: ${utterance.voice?.name}`);
-          }
-        }, 100);
+      // iOS Safari sometimes needs multiple attempts to get voices
+      if (availableVoices.length === 0 && (isSafari || isiOSSafari)) {
+        console.log('No voices available in Safari, forcing voice refresh');
+        
+        // Force the speechSynthesis to update
+        window.speechSynthesis.cancel();
+        
+        // Attempt to get voices again
+        availableVoices = window.speechSynthesis.getVoices();
+        console.log(`Voices after forced refresh: ${availableVoices.length}`);
       }
       
       // Try to find a good voice with more fallbacks
       let preferredVoice = null;
       
-      if (isSafari) {
-        // Safari generally works better with simple voice selection
+      if (isiOSSafari) {
+        // iOS Safari - try to get an explicitly English voice
+        console.log('Finding voice for iOS Safari');
+        // Log all available voices for debugging
+        availableVoices.forEach((v, i) => {
+          console.log(`Voice ${i}: ${v.name}, Lang: ${v.lang}, Default: ${v.default}`);
+        });
+        
+        // On iOS, try to use the default voice first as it's most reliable
+        preferredVoice = availableVoices.find(voice => voice.default);
+        
+        // If no default voice, try to find an English one
+        if (!preferredVoice) {
+          preferredVoice = availableVoices.find(voice => 
+            voice.lang.startsWith('en') || voice.name.includes('English')
+          );
+        }
+      } else if (isSafari) {
+        // Desktop Safari
         preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
       } else {
-        // More specific voice selection for other browsers
+        // Other browsers
         preferredVoice = availableVoices.find(voice => 
           voice.name.includes('Google') && voice.lang.startsWith('en')
         );
@@ -278,16 +304,75 @@ export default function useVoiceRecognition({
         onSpeakingChangeRef.current(false);
       };
       
-      // Safari-specific handling
-      if (isSafari) {
-        // Safari needs a cleaner approach - just speak directly
+      // iOS-specific handling
+      if (isiOSSafari) {
+        console.log('Using iOS Safari speech approach');
+        
+        // iOS requires user interaction to play audio
+        // We'll use a simpler approach without timeout
         try {
-          // Make sure voices are loaded in Safari
+          // Make sure any pending speech is canceled
+          window.speechSynthesis.cancel();
+          
+          // iOS sometimes needs a small pause
+          setTimeout(() => {
+            try {
+              console.log('Speaking on iOS Safari');
+              // Speak with shorter text chunks if the text is long
+              if (text.length > 100) {
+                // iOS can sometimes struggle with long text
+                const chunks = text.match(/.{1,100}(?=\s|$|\n|\.|\?|\!)/g) || [text];
+                console.log(`Speaking in ${chunks.length} chunks`);
+                
+                // Speak the first chunk immediately
+                const firstChunk = new SpeechSynthesisUtterance(chunks[0]);
+                if (preferredVoice) firstChunk.voice = preferredVoice;
+                firstChunk.rate = utterance.rate;
+                firstChunk.pitch = utterance.pitch;
+                firstChunk.volume = utterance.volume;
+                window.speechSynthesis.speak(firstChunk);
+                
+                // Queue the rest with delays to avoid iOS cutting off
+                if (chunks.length > 1) {
+                  for (let i = 1; i < chunks.length; i++) {
+                    const chunkUtterance = new SpeechSynthesisUtterance(chunks[i]);
+                    if (preferredVoice) chunkUtterance.voice = preferredVoice;
+                    chunkUtterance.rate = utterance.rate;
+                    chunkUtterance.pitch = utterance.pitch;
+                    chunkUtterance.volume = utterance.volume;
+                    
+                    // For the last chunk, add the onend handler
+                    if (i === chunks.length - 1) {
+                      chunkUtterance.onend = () => {
+                        console.log('Final chunk speech ended');
+                        onSpeakingChangeRef.current(false);
+                      };
+                    }
+                    
+                    window.speechSynthesis.speak(chunkUtterance);
+                  }
+                }
+              } else {
+                // For short text, use the original utterance
+                window.speechSynthesis.speak(utterance);
+              }
+            } catch (e) {
+              console.error('iOS speech attempt error:', e);
+              onSpeakingChangeRef.current(false);
+            }
+          }, 50);
+        } catch (e) {
+          console.error('iOS Safari speech error:', e);
+          onSpeakingChangeRef.current(false);
+        }
+      } else if (isSafari) {
+        // Desktop Safari needs a cleaner approach
+        try {
           if (window.speechSynthesis.pending) {
             window.speechSynthesis.cancel();
           }
           
-          console.log('Speaking in Safari');
+          console.log('Speaking in Desktop Safari');
           window.speechSynthesis.speak(utterance);
         } catch (e) {
           console.error('Safari speech error:', e);
