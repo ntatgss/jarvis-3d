@@ -1,26 +1,353 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+  --background-end-rgb: 10, 20, 30;
+  --accent-blue: #0063ff;
+  --accent-dark-blue: #001e4d;
+  --accent-glow: rgba(0, 99, 255, 0.3);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  background-color: var(--background);
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(to bottom, #050505, #101318);
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Ambient background effect */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 30%, var(--accent-glow) 0%, transparent 40%),
+    radial-gradient(circle at 80% 20%, rgba(20, 50, 80, 0.2) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Prevent canvas from disappearing */
+canvas,
+.canvas,
+.jarvis-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  outline: none;
+  position: absolute !important;
+  touch-action: none;
+  top: 0 !important;
+  left: 0 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1 !important;
+}
+
+/* Create a stable container */
+.jarvis-3d-container {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
+  overflow: hidden;
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Ensure fixed height for 3D scene */
+.jarvis-3d-scene {
+  min-height: 60vh !important;
+  height: 60vh !important;
+  overflow: hidden;
+  position: relative;
+  background: transparent;
+  contain: layout size;
+}
+
+/* Force hardware acceleration */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Fixes for specific browsers */
+@supports (-webkit-touch-callout: none) {
+  .jarvis-3d-scene, 
+  .jarvis-3d-container,
+  canvas {
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+  }
+}
+
+/* For Firefox */
+@-moz-document url-prefix() {
+  canvas {
+    position: absolute !important;
+  }
+}
+
+/* Fix for Chrome */
+@media screen and (-webkit-min-device-pixel-ratio:0) {
+  canvas {
+    display: block !important;
+    position: absolute !important;
+  }
+}
+
+/* Mobile responsive chat container */
+.chat-container {
+  background-color: rgba(20, 25, 35, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(50, 65, 90, 0.3);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 
+              0 8px 10px -6px rgba(0, 0, 0, 0.2),
+              0 0 15px rgba(0, 99, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+/* Mobile chat container and toggle styling */
+@media (max-width: 768px) {
+  .chat-container {
+    transition: all 0.3s ease;
+  }
+
+  .chat-minimized {
+    height: 60px !important;
+    overflow: hidden;
+    border-radius: 9999px;
+    position: fixed !important;
+    bottom: 1rem;
+    right: 1rem;
+    width: 60px !important;
+    background-color: var(--accent-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 15px rgba(0, 99, 255, 0.5);
+    cursor: pointer;
+    z-index: 50;
+    transition: all 0.3s ease;
+    animation: pulse 2s infinite;
+  }
+
+  /* Pulsing animation for minimized chat bubble */
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(0, 99, 255, 0.7);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(0, 99, 255, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(0, 99, 255, 0);
+    }
+  }
+  
+  .chat-minimized::before {
+    content: "💬";
+    font-size: 1.5rem;
+  }
+  
+  .chat-minimized > * {
+    display: none;
+  }
+
+  /* Show the hint text in minimized state */
+  .chat-minimized .chat-expand-hint {
+    display: flex !important;
+    font-size: 0;
+  }
+
+  /* Hide the hint text by default */
+  .chat-expand-hint {
+    display: none;
+    color: white;
+    font-size: 0.75rem;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+  
+  /* Hide mobile inside toggle when chat is minimized */
+  .chat-minimized .mobile-toggle-btn {
+    display: none;
+  }
+
+  /* Show outside toggle when chat is minimized */
+  .mobile-toggle-btn-outside {
+    display: none;
+  }
+  
+  .chat-minimized ~ .mobile-toggle-btn-outside {
+    display: flex;
+  }
+}
+
+/* Desktop chat minimized state */
+@media (min-width: 768px) {
+  .desktop-minimized {
+    max-height: 60px !important;
+    overflow: hidden;
+    transform: translateY(calc(100% - 60px));
+    transition: all 0.3s ease;
+    opacity: 0.9;
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+  }
+  
+  .desktop-minimized:hover {
+    opacity: 1;
+    transform: translateY(calc(100% - 80px));
+    box-shadow: 0 -5px 20px rgba(0, 99, 255, 0.3);
+  }
+  
+  .desktop-minimized .desktop-chat-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: rgba(0, 99, 255, 0.2);
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+  }
+  
+  .desktop-minimized .desktop-chat-header-title {
+    font-weight: bold;
+    color: var(--foreground);
+  }
+  
+  /* Hide all contents except the header when minimized */
+  .desktop-minimized > *:not(.desktop-chat-header) {
+    display: none;
+  }
+  
+  /* Position the toggle button inside the header when minimized */
+  .desktop-minimized .desktop-toggle-btn {
+    position: relative !important;
+    top: 0 !important;
+    right: 0 !important;
+    transform: rotate(180deg);
+    background-color: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  
+  /* Normal state for toggle button */
+  .desktop-toggle-btn {
+    transition: all 0.3s ease;
+    z-index: 999 !important; /* Ensure button is always clickable */
+  }
+
+  /* Desktop chat header - only visible when minimized on desktop */
+  .desktop-chat-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: rgba(0, 99, 255, 0.2);
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+  }
+  
+  .desktop-minimized .desktop-chat-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: rgba(0, 99, 255, 0.2);
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+  }
+  
+  .desktop-minimized .desktop-chat-header-title {
+    font-weight: bold;
+    color: var(--foreground);
+  }
+  
+  /* Hide all contents except the header when minimized */
+  .desktop-minimized > *:not(.desktop-chat-header) {
+    display: none;
+  }
+  
+  /* Desktop header toggle button styling */
+  .desktop-header-toggle-btn {
+    background: transparent;
+    padding: 0.25rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .desktop-minimized .desktop-header-toggle-btn {
+    transform: rotate(180deg);
+  }
+  
+  /* Normal state for toggle button */
+  .desktop-toggle-btn {
+    transition: all 0.3s ease;
+    z-index: 999 !important; /* Ensure button is always clickable */
+  }
+}
+
+/* Improve scrollbar appearance */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(75, 85, 99, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.5);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.7);
+}
+
+/* Safe area insets for notched devices */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
