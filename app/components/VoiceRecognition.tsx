@@ -27,32 +27,59 @@ interface VoiceRecognitionProps {
   onTranscript: (text: string) => void;
   onListeningChange: (isListening: boolean) => void;
   onSpeakingChange: (isSpeaking: boolean) => void;
-  preferredGender?: 'male' | 'female';
+  preferredGender?: 'male' | 'female' | 'lmnt';
+  onLmntLoadingChange?: (isLoading: boolean) => void;
 }
 
 export default function useVoiceRecognition({ 
   onTranscript, 
   onListeningChange, 
   onSpeakingChange,
-  preferredGender = 'male'
+  preferredGender = 'male',
+  onLmntLoadingChange
 }: VoiceRecognitionProps) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [recognition, setRecognition] = useState<SpeechRecognitionInstance | null>(null);
   const [temporaryTranscript, setTemporaryTranscript] = useState('');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   
   // Use refs to store the callback functions
   const onTranscriptRef = useRef(onTranscript);
   const onListeningChangeRef = useRef(onListeningChange);
   const onSpeakingChangeRef = useRef(onSpeakingChange);
+  const onLmntLoadingChangeRef = useRef(onLmntLoadingChange);
   
   // Update refs when props change
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
     onListeningChangeRef.current = onListeningChange;
     onSpeakingChangeRef.current = onSpeakingChange;
-  }, [onTranscript, onListeningChange, onSpeakingChange]);
+    onLmntLoadingChangeRef.current = onLmntLoadingChange;
+  }, [onTranscript, onListeningChange, onSpeakingChange, onLmntLoadingChange]);
+
+  // Initialize audio element for LMNT
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const audio = new Audio();
+      audio.addEventListener('ended', () => {
+        onSpeakingChangeRef.current(false);
+      });
+      audio.addEventListener('error', () => {
+        console.error('Audio playback error');
+        onSpeakingChangeRef.current(false);
+      });
+      setAudioElement(audio);
+    }
+    
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
+      }
+    };
+  }, []);
 
   // Initialize speech synthesis voices
   useEffect(() => {
@@ -239,8 +266,79 @@ export default function useVoiceRecognition({
     return voice;
   }, []);
 
+  // Function to use LMNT API for speech
+  const speakWithLMNT = useCallback(async (text: string) => {
+    if (!audioElement) return;
+    
+    try {
+      console.log('Using LMNT voice for speech');
+      onSpeakingChangeRef.current(true);
+      
+      // Notify that LMNT is loading
+      if (onLmntLoadingChangeRef.current) {
+        onLmntLoadingChangeRef.current(true);
+      }
+      
+      // Stop any current playback
+      audioElement.pause();
+      
+      // Call our API route
+      const response = await fetch('/api/lmnt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          text,
+          voice: 'lily' // Default LMNT voice
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate speech with LMNT');
+      }
+      
+      // Get the audio blob
+      const audioBlob = await response.blob();
+      
+      // LMNT loading is complete
+      if (onLmntLoadingChangeRef.current) {
+        onLmntLoadingChangeRef.current(false);
+      }
+      
+      // Create a URL for the blob
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      // Set the audio source and play
+      audioElement.src = audioUrl;
+      
+      // Play the audio
+      const playPromise = audioElement.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error('Error playing audio:', error);
+          onSpeakingChangeRef.current(false);
+        });
+      }
+    } catch (error) {
+      console.error('LMNT speech error:', error);
+      onSpeakingChangeRef.current(false);
+      
+      // LMNT loading is complete (with error)
+      if (onLmntLoadingChangeRef.current) {
+        onLmntLoadingChangeRef.current(false);
+      }
+    }
+  }, [audioElement]);
+
   // Text-to-speech function
   const speak = useCallback((text: string) => {
+    // If LMNT is selected, use LMNT API
+    if (preferredGender === 'lmnt') {
+      speakWithLMNT(text);
+      return;
+    }
+    
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       console.log('Speaking:', text);
       onSpeakingChangeRef.current(true);
@@ -270,7 +368,7 @@ export default function useVoiceRecognition({
             });
             
             // Find voice based on gender preference for iOS
-            const preferredVoice = findVoiceByGender(availableVoices, preferredGender);
+            const preferredVoice = findVoiceByGender(availableVoices, preferredGender as 'male' | 'female');
             if (preferredVoice) {
               console.log(`Using iOS ${preferredGender} voice:`, preferredVoice.name);
               iosUtterance.voice = preferredVoice;
@@ -375,7 +473,7 @@ export default function useVoiceRecognition({
         console.log(`Available voices: ${availableVoices.length}`);
         
         // Find voice based on gender preference
-        const preferredVoice = findVoiceByGender(availableVoices, preferredGender);
+        const preferredVoice = findVoiceByGender(availableVoices, preferredGender as 'male' | 'female');
         
         if (preferredVoice) {
           console.log(`Using ${preferredGender} voice:`, preferredVoice.name);
@@ -430,7 +528,7 @@ export default function useVoiceRecognition({
       console.error('Speech synthesis not supported in this browser');
       onSpeakingChangeRef.current(false);
     }
-  }, [voices, findVoiceByGender, preferredGender]);
+  }, [voices, findVoiceByGender, preferredGender, speakWithLMNT]);
 
   return {
     isListening,
