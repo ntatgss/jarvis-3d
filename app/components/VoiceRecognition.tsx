@@ -567,7 +567,7 @@ export default function useVoiceRecognition({
     const isMobile = isMobileDevice();
     
     // If LMNT is selected AND not on mobile, use LMNT API
-    if (preferredGender === 'lmnt' && (!DISABLE_LMNT_ON_MOBILE || !isMobile)) {
+    if (preferredGender === 'lmnt' && !isMobile) {
       speakWithLMNT(text);
       return;
     }

@@ -302,17 +302,21 @@ export default function JarvisInterface() {
     console.log("Is mobile device:", isMobile);
     
     setVoiceGender((prev) => {
-      // If on mobile and trying to switch to LMNT, skip to male
-      if (DISABLE_LMNT_ON_MOBILE && isMobile && prev === "female") {
-        // Show a message that LMNT is not available on mobile
-        setError("Advanced voice is not available on mobile devices. Using standard voice instead.");
-        setTimeout(() => setError(null), 3000); // Clear error after 3 seconds
-        console.log("Skipping LMNT on mobile, switching to male voice");
+      // On mobile, only toggle between male and female
+      if (isMobile) {
+        // If current is male, switch to female
+        if (prev === "male") {
+          console.log("Mobile device: switching from male to female");
+          return "female";
+        }
+        // If current is female or anything else, switch to male
+        console.log("Mobile device: switching to male");
         return "male";
       }
       
+      // On desktop, cycle through all three options
       const newVoice = prev === "male" ? "female" : prev === "female" ? "lmnt" : "male";
-      console.log(`Switching voice from ${prev} to ${newVoice}`);
+      console.log(`Desktop: switching voice from ${prev} to ${newVoice}`);
       return newVoice;
     });
   }, []);
@@ -406,9 +410,9 @@ export default function JarvisInterface() {
           <button
             onClick={toggleVoiceGender}
             className={`mt-2 w-full md:w-auto bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg transition-all duration-300 justify-center md:justify-start`}
-            title={`Switch to ${voiceGender === "male" ? "female" : voiceGender === "female" ? 
-              (typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "male" : "Advanced") 
-              : "male"} voice`}
+            title={`Switch to ${voiceGender === "male" ? "Female" : voiceGender === "female" ? 
+              (isMobileDevice() ? "Male" : "Advanced") 
+              : "Male"} voice`}
           >
             {voiceGender === "male" ? <Male className="w-3.5 h-3.5" /> : 
              voiceGender === "female" ? <Female className="w-3.5 h-3.5" /> : 
@@ -420,12 +424,6 @@ export default function JarvisInterface() {
                voiceGender === "female" ? "Female Voice" : 
                "Advanced Voice"}
             </span>
-            {typeof navigator !== 'undefined' && 
-             /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && 
-             !(/Macintosh/i.test(navigator.userAgent) && /Safari/i.test(navigator.userAgent)) && 
-             voiceGender === "female" && (
-              <span className="text-xs opacity-75 ml-1">(Advanced not available on mobile)</span>
-            )}
           </button>
 
           {/* LMNT voice info - only show when LMNT is selected */}
