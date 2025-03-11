@@ -5,6 +5,17 @@ import { useState, useCallback, useRef, useEffect } from "react"
 import JarvisScene from "./JarvisScene"
 import useVoiceRecognition from "./VoiceRecognition"
 import { Mic, MicOff, Send, UserIcon as Male, UserIcon as Female, X, Maximize, Minimize } from "lucide-react"
+import { JARVIS_SYSTEM_PROMPT } from "../utils/systemPrompt"
+import { isMobileDevice, isIOSDevice } from "../utils/deviceDetection"
+import { callOpenAI, preloadAPIs } from "../utils/apiUtils"
+import { 
+  DEFAULT_VOICE_GENDER, 
+  MAX_RECENT_MESSAGES, 
+  PRELOAD_DELAY,
+  FETCH_TIMEOUT,
+  DISABLE_LMNT_ON_MOBILE,
+  ENABLE_PRELOADING
+} from "../utils/config"
 
 // Define a type for conversation messages
 interface Message {
@@ -19,11 +30,8 @@ const IOSAudioUnlock = () => {
   const [audioUnlocked, setAudioUnlocked] = useState(false)
 
   useEffect(() => {
-    // Check if this is iOS
-    if (typeof navigator !== "undefined") {
-      const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      setIsIOS(isIOSDevice)
-    }
+    // Check if this is iOS using our utility
+    setIsIOS(isIOSDevice());
   }, [])
 
   const unlockAudio = () => {
@@ -155,7 +163,7 @@ export default function JarvisInterface() {
       setLoading(true)
       setError(null)
 
-      // Add user message to conversation history
+      // Add user message to conversation history immediately for better UX
       const userMsg: Message = {
         role: "user",
         content: message,
@@ -163,6 +171,11 @@ export default function JarvisInterface() {
       }
 
       setConversationHistory((prev) => [...prev, userMsg])
+      
+      // Clear input if the message is still the same (hasn't been changed during processing)
+      if (userMessage === currentMessage) {
+        setUserMessage("")
+      }
 
       try {
         // Convert conversation history to the format expected by the API
@@ -180,34 +193,30 @@ export default function JarvisInterface() {
         // Add system message at the beginning (it will be handled properly by the API route)
         const systemMessage = {
           role: "system" as const,
-          content:
-            "You are Jarvis, an advanced AI assistant with a 3D visual representation. Be helpful, informative, and maintain a slightly formal but friendly tone similar to Jarvis from Iron Man.",
+          content: JARVIS_SYSTEM_PROMPT,
         }
 
         // Take the most recent messages but ensure system message is included
-        // We want 9 most recent messages plus the system message (10 total)
-        const recentMessages = apiMessages.length > 9 ? apiMessages.slice(-9) : apiMessages
+        // We want MAX_RECENT_MESSAGES most recent messages plus the system message
+        const recentMessages = apiMessages.length > MAX_RECENT_MESSAGES 
+          ? apiMessages.slice(-MAX_RECENT_MESSAGES) 
+          : apiMessages
 
         // Combine system message with recent messages
         const limitedMessages = [systemMessage, ...recentMessages]
-
-        const response = await fetch("/api/openai", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ messages: limitedMessages }),
-        })
-
-        if (!response.ok) {
-          throw new Error("Failed to get response from OpenAI")
-        }
-
-        const data = await response.json()
+        
+        // Start a timer to measure response time
+        const startTime = performance.now()
+        
+        // Call the OpenAI API using our utility function
+        const data = await callOpenAI(limitedMessages, { timeout: FETCH_TIMEOUT }) as any
+        
+        // Log response time for analytics
+        const responseTime = performance.now() - startTime
+        console.log(`OpenAI API response time: ${responseTime.toFixed(0)}ms`)
 
         // Extract the response text from the OpenAI API response
-        // This handles both direct API calls and SDK responses
-        let responseText
+        let responseText = ""
         if (data.choices && data.choices[0]) {
           if (data.choices[0].message) {
             // Handle standard format (gpt-3.5-turbo)
@@ -240,11 +249,6 @@ export default function JarvisInterface() {
         setConversationHistory((prev) => [...prev, assistantMessage])
         setJarvisResponse(responseText)
         setMessageProcessed(true)
-
-        // Clear input if the message is still the same (hasn't been changed during processing)
-        if (userMessage === currentMessage) {
-          setUserMessage("")
-        }
 
         // Use the ref to access the speak function
         if (speakRef.current) {
@@ -291,13 +295,26 @@ export default function JarvisInterface() {
 
   // Toggle voice gender
   const toggleVoiceGender = useCallback(() => {
+    // Detect mobile devices using our utility
+    const isMobile = isMobileDevice();
+    
     setVoiceGender((prev) => {
-      if (prev === "male") return "female"
-      if (prev === "female") return "lmnt"
-      return "male"
-    })
-    console.log(`Voice gender switched to ${voiceGender === "male" ? "female" : voiceGender === "female" ? "lmnt" : "male"}`)
-  }, [voiceGender])
+      // If on mobile and trying to switch to LMNT, skip to male
+      if (DISABLE_LMNT_ON_MOBILE && isMobile && prev === "female") {
+        // Show a message that LMNT is not available on mobile
+        setError("Advanced voice is not available on mobile devices. Using standard voice instead.");
+        setTimeout(() => setError(null), 3000); // Clear error after 3 seconds
+        return "male";
+      }
+      
+      if (prev === "male") return "female";
+      if (prev === "female") return "lmnt";
+      return "male";
+    });
+    
+    // Log the change
+    console.log(`Voice gender switched to ${voiceGender === "male" ? "female" : voiceGender === "female" ? "lmnt" : "male"}`);
+  }, [voiceGender]);
 
   // Toggle chat minimized state
   const toggleChatMinimized = () => {
@@ -333,6 +350,21 @@ export default function JarvisInterface() {
     };
   }, []);
 
+  // Preload API connections on initial load
+  useEffect(() => {
+    if (!ENABLE_PRELOADING) return;
+    
+    const initPreload = async () => {
+      // Detect mobile devices using our utility
+      const isMobile = isMobileDevice();
+      await preloadAPIs(voiceGender, isMobile);
+    };
+    
+    // Delay preload to not interfere with initial rendering
+    const timer = setTimeout(initPreload, PRELOAD_DELAY);
+    return () => clearTimeout(timer);
+  }, [voiceGender]);
+
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden relative bg-gradient-to-b from-gray-900 to-black">
       <IOSAudioUnlock />
@@ -362,14 +394,23 @@ export default function JarvisInterface() {
           <button
             onClick={toggleVoiceGender}
             className={`mt-2 w-full md:w-auto bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg transition-all duration-300 justify-center md:justify-start`}
-            title={`Switch to ${voiceGender === "male" ? "female" : voiceGender === "female" ? "Advanced" : "male"} voice`}
+            title={`Switch to ${voiceGender === "male" ? "female" : voiceGender === "female" ? 
+              (typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "male" : "Advanced") 
+              : "male"} voice`}
           >
             {voiceGender === "male" ? <Male className="w-3.5 h-3.5" /> : 
              voiceGender === "female" ? <Female className="w-3.5 h-3.5" /> : 
              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-3.5 h-3.5">
                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
              </svg>}
-            <span>{voiceGender === "male" ? "Male Voice" : voiceGender === "female" ? "Female Voice" : "Advanced Voice (Lily)"}</span>
+            <span>
+              {voiceGender === "male" ? "Male Voice" : 
+               voiceGender === "female" ? "Female Voice" : 
+               "Advanced Voice"}
+            </span>
+            {typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && voiceGender === "female" && (
+              <span className="text-xs opacity-75 ml-1">(Advanced not available on mobile)</span>
+            )}
           </button>
 
           {/* LMNT voice info - only show when LMNT is selected */}
@@ -532,6 +573,9 @@ export default function JarvisInterface() {
                     <div className="text-sm mt-1 max-w-xs">
                       Ask me anything or use the microphone button to speak with me
                     </div>
+                    <div className="text-xs mt-2 text-blue-400">
+                      I can both text AND speak to you with my voice synthesis
+                    </div>
                   </div>
                 ) : (
                   conversationHistory.map((msg, index) => (
@@ -573,7 +617,7 @@ export default function JarvisInterface() {
                   <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
                     <input
                       type="text"
-                      placeholder="Type your message..."
+                      placeholder="Type your message... (I can speak too!)"
                       className="flex-1 py-2 px-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       value={userMessage}
                       onChange={handleInputChange}

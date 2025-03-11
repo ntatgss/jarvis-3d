@@ -1,6 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { isMobileDevice, isIOSDevice, supportsSpeechSynthesis } from '../utils/deviceDetection';
+import { callLMNT } from '../utils/apiUtils';
+import { 
+  DISABLE_LMNT_ON_MOBILE, 
+  DEFAULT_LMNT_VOICE,
+  FETCH_TIMEOUT
+} from '../utils/config';
 
 // Define proper types for SpeechRecognition
 interface SpeechRecognitionEvent extends Event {
@@ -270,8 +277,8 @@ export default function useVoiceRecognition({
   const speakWithLMNT = useCallback(async (text: string) => {
     if (!audioElement) return;
     
-    // Detect iOS devices
-    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    // Detect iOS devices using our utility
+    const isIOS = isIOSDevice();
     
     console.log('Speaking with LMNT:', text);
     onSpeakingChangeRef.current(true);
@@ -288,7 +295,7 @@ export default function useVoiceRecognition({
       audioElement.pause();
       
       // For mobile devices, try to unlock audio context first
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isMobile = isMobileDevice();
       
       if (isMobile) {
         try {
@@ -352,31 +359,16 @@ export default function useVoiceRecognition({
         }
       }
       
-      // Call our API route with a longer timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
       try {
-        const response = await fetch('/api/lmnt', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            text,
-            voice: 'lily' // Default LMNT voice
-          }),
-          signal: controller.signal
-        });
+        // Start a timer to measure response time
+        const startTime = performance.now();
         
-        clearTimeout(timeoutId);
+        // Use our utility function to call the LMNT API
+        const audioBuffer = await callLMNT(text, DEFAULT_LMNT_VOICE, { timeout: FETCH_TIMEOUT });
         
-        if (!response.ok) {
-          throw new Error(`Failed to generate speech with Advanced voice: ${response.status}`);
-        }
-        
-        // Get the audio blob
-        const audioBlob = await response.blob();
+        // Log response time for analytics
+        const responseTime = performance.now() - startTime;
+        console.log(`LMNT API response time: ${responseTime.toFixed(0)}ms`);
         
         // LMNT loading is complete
         if (onLmntLoadingChangeRef.current) {
@@ -384,11 +376,15 @@ export default function useVoiceRecognition({
         }
         
         // Create a URL for the blob
+        const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
         const audioUrl = URL.createObjectURL(audioBlob);
         
         // Set the audio source
         audioElement.src = audioUrl;
         audioElement.load(); // Important for mobile
+        
+        // Preload the audio
+        audioElement.preload = 'auto';
         
         // For mobile devices, we need special handling
         if (isMobile) {
@@ -447,56 +443,43 @@ export default function useVoiceRecognition({
             console.error('Mobile audio error:', e);
             onSpeakingChangeRef.current(false);
           };
-          
-          // Handle completion
-          audioElement.onended = () => {
-            console.log('Mobile audio playback completed');
-            onSpeakingChangeRef.current(false);
-          };
         } else {
-          // Normal play for desktop devices
-          const playPromise = audioElement.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(error => {
-              console.error('Error playing audio:', error);
-              onSpeakingChangeRef.current(false);
-            });
-          }
+          // For desktop, just play
+          audioElement.play().catch(e => {
+            console.error('Desktop audio playback error:', e);
+            onSpeakingChangeRef.current(false);
+          });
         }
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        throw fetchError;
-      }
-    } catch (error) {
-      console.error('Advanced voice error:', error);
-      onSpeakingChangeRef.current(false);
-      
-      // LMNT loading is complete (with error)
-      if (onLmntLoadingChangeRef.current) {
-        onLmntLoadingChangeRef.current(false);
-      }
-      
-      // Fallback to browser TTS
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
+      } catch (e) {
+        console.error('Error fetching LMNT speech:', e);
+        
+        // LMNT loading failed
+        if (onLmntLoadingChangeRef.current) {
+          onLmntLoadingChangeRef.current(false);
+        }
+        
+        // Fall back to browser TTS
+        console.log('Falling back to browser TTS');
         try {
-          console.log('Falling back to browser TTS');
           const utterance = new SpeechSynthesisUtterance(text);
           
-          // For iOS, we need to use a different voice
-          if (isIOS) {
-            // Get available voices
-            const voices = window.speechSynthesis.getVoices();
-            // Try to find an English voice
-            const englishVoice = voices.find(v => v.lang.startsWith('en'));
-            if (englishVoice) {
-              utterance.voice = englishVoice;
-            }
+          // Find a good voice
+          const voices = window.speechSynthesis.getVoices();
+          const englishVoice = voices.find(v => v.lang.startsWith('en'));
+          if (englishVoice) {
+            utterance.voice = englishVoice;
           }
           
-          utterance.onend = () => onSpeakingChangeRef.current(false);
-          utterance.onerror = () => onSpeakingChangeRef.current(false);
+          // Set up event listeners
+          utterance.onend = () => {
+            onSpeakingChangeRef.current(false);
+          };
           
-          // Set a volume and rate that works well on mobile
+          utterance.onerror = () => {
+            console.error('Fallback TTS error');
+            onSpeakingChangeRef.current(false);
+          };
+          
           utterance.volume = 1.0;
           utterance.rate = 0.9;
           
@@ -506,23 +489,34 @@ export default function useVoiceRecognition({
           onSpeakingChangeRef.current(false);
         }
       }
+    } catch (e) {
+      console.error('LMNT speech error:', e);
+      onSpeakingChangeRef.current(false);
+      
+      // LMNT loading failed
+      if (onLmntLoadingChangeRef.current) {
+        onLmntLoadingChangeRef.current(false);
+      }
     }
   }, [audioElement]);
 
   // Text-to-speech function
   const speak = useCallback((text: string) => {
-    // If LMNT is selected, use LMNT API
-    if (preferredGender === 'lmnt') {
+    // Detect mobile devices using our utility
+    const isMobile = isMobileDevice();
+    
+    // If LMNT is selected AND not on mobile, use LMNT API
+    if (preferredGender === 'lmnt' && (!DISABLE_LMNT_ON_MOBILE || !isMobile)) {
       speakWithLMNT(text);
       return;
     }
     
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      console.log('Speaking:', text);
+    if (supportsSpeechSynthesis()) {
+      console.log('Speaking with browser TTS:', text);
       onSpeakingChangeRef.current(true);
       
       // Simple browser detection - only care about iOS
-      const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      const isIOS = isIOSDevice();
       
       const utterance = new SpeechSynthesisUtterance(text);
       
@@ -535,16 +529,18 @@ export default function useVoiceRecognition({
         if (englishVoice) {
           utterance.voice = englishVoice;
         }
-      } else if (preferredGender === 'male') {
+      } else {
         // NON-iOS BROWSERS
         const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
         console.log(`Available voices: ${availableVoices.length}`);
         
         // Find voice based on gender preference
-        const preferredVoice = findVoiceByGender(availableVoices, preferredGender as 'male' | 'female');
+        // If we were using LMNT but on mobile, default to female voice
+        const genderToUse = preferredGender === 'lmnt' ? 'female' : preferredGender;
+        const preferredVoice = findVoiceByGender(availableVoices, genderToUse as 'male' | 'female');
         
         if (preferredVoice) {
-          console.log(`Using ${preferredGender} voice:`, preferredVoice.name);
+          console.log(`Using ${genderToUse} voice:`, preferredVoice.name);
           utterance.voice = preferredVoice;
         } else if (availableVoices.length > 0) {
           console.log('Using default voice:', availableVoices[0].name);
