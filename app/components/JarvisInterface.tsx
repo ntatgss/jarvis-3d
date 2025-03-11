@@ -56,8 +56,7 @@ export default function JarvisInterface() {
   const { 
     startListening, 
     stopListening, 
-    speak,
-    temporaryTranscript
+    speak
   } = useVoiceRecognition({
     onTranscript,
     onListeningChange,
@@ -252,6 +251,14 @@ export default function JarvisInterface() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Handle chat container click for mobile expanded state
+  const handleChatContainerClick = () => {
+    if (window.innerWidth < 768 && 
+        document.getElementById('chat-container')?.classList.contains('chat-minimized')) {
+      document.getElementById('chat-container')?.classList.remove('chat-minimized');
+    }
+  };
+
   // Effect to handle chat container toggle state
   useEffect(() => {
     const chatContainer = document.getElementById('chat-container');
@@ -382,13 +389,7 @@ export default function JarvisInterface() {
             background: 'rgba(5, 10, 20, 0.75)',
             transition: 'transform 0.3s ease, max-height 0.3s ease, opacity 0.3s ease'
           }}
-          onClick={(e) => {
-            // For mobile, allow clicking the minimized bubble to expand
-            if (window.innerWidth < 768 && 
-                e.currentTarget.classList.contains('chat-minimized')) {
-              e.currentTarget.classList.remove('chat-minimized');
-            }
-          }}
+          onClick={handleChatContainerClick}
         >
           {/* Mobile toggle button inside the chat container */}
           <button 
@@ -486,34 +487,61 @@ export default function JarvisInterface() {
               onClick={isListening ? stopListening : startListening}
               className={`flex items-center justify-center px-2 sm:px-4 py-2 rounded-full ${
                 isListening 
-                  ? 'bg-red-600/90 hover:bg-red-700/90' 
-                  : 'bg-blue-600/90 hover:bg-blue-700/90'
-              } text-white transition-colors flex-shrink-0 shadow-md shadow-blue-800/20`}
-              aria-label={isListening ? "Stop listening" : "Start listening"}
+                  ? 'bg-red-600 text-white' 
+                  : 'bg-blue-600 text-white'
+              }`}
+              disabled={loading}
             >
-              <span className={`${isListening ? 'animate-ping' : ''}`}>🎤</span>
-              <span className="ml-1 hidden sm:inline">{isListening ? 'Stop' : 'Talk'}</span>
+              {isListening ? (
+                <>
+                  <span className="hidden sm:inline mr-1">Stop</span>
+                  <span className="sr-only">Stop listening</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" />
+                  </svg>
+                </>
+              ) : (
+                <>
+                  <span className="hidden sm:inline mr-1">Talk</span>
+                  <span className="sr-only">Start listening</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                  </svg>
+                </>
+              )}
             </button>
             
-            <form onSubmit={handleTextSubmit} className="flex-grow flex">
+            <form onSubmit={handleTextSubmit} className="flex-1 flex gap-1">
               <input
                 type="text"
+                placeholder="Type your message..."
+                className="flex-1 py-2 px-3 bg-gray-800/70 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={userMessage}
                 onChange={handleInputChange}
-                className="flex-grow px-2 sm:px-3 py-2 bg-gray-800/80 text-white text-sm rounded-l border border-gray-700/50 focus:border-blue-500/80 focus:outline-none backdrop-blur-sm"
-                placeholder="Type your message..."
-                disabled={isListening || loading}
+                disabled={loading || isListening}
               />
               <button
                 type="submit"
-                className="bg-green-600/90 hover:bg-green-700/90 text-white px-2 sm:px-4 py-2 rounded-r flex items-center justify-center transition-colors shadow-md shadow-green-800/20"
-                disabled={!userMessage.trim() || isListening || loading}
+                className="bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={loading || !userMessage.trim() || isListening}
               >
-                <span className="mr-1">📤</span>
-                <span className="hidden sm:inline">Send</span>
+                <span className="sr-only">Send message</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                </svg>
               </button>
             </form>
           </div>
+          
+          {/* Loading state indicator */}
+          {loading && (
+            <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-spin h-10 w-10 border-t-2 border-b-2 border-blue-500 rounded-full mx-auto mb-3"></div>
+                <p className="text-blue-400">Jarvis is thinking...</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

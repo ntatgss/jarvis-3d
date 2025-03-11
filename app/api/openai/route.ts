@@ -9,21 +9,10 @@ When asked about your identity, always remember that you are Jarvis.
 Your responses should be helpful, informative, and somewhat concise.
 Try to maintain a slightly formal but friendly tone, similar to the Jarvis AI from Iron Man.`;
 
-// Type definition for traditional messages
-interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-// Type definitions for o3-mini model format
-interface O3Content {
+// Type for o3-mini format messages
+interface O3ContentItem {
   type: 'text';
   text: string;
-}
-
-interface O3Message {
-  role: 'developer' | 'user' | 'assistant';
-  content: O3Content[];
 }
 
 export async function POST(req: NextRequest) {
@@ -38,14 +27,14 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     // Initialize the OpenAI client
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
-    
+
     // Prepare messages array for OpenAI API
-    let apiMessages: any[] = [];
+    let apiMessages: Record<string, unknown>[] = [];
     
     // If there's a single prompt, convert it to a messages array
     if (prompt) {
@@ -80,16 +69,16 @@ export async function POST(req: NextRequest) {
         });
       }
     }
-    
+
     try {
       // Try using o3-mini model first
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
-        messages: apiMessages,
+        messages: apiMessages as any,
         response_format: {
           type: "text"
         },
-        // reasoning_effort: "low"
+        // reasoning_effort: "medium"
       });
       
       return NextResponse.json(completion);
@@ -101,14 +90,17 @@ export async function POST(req: NextRequest) {
         // Convert developer role back to system for standard models
         const role = msg.role === 'developer' ? 'system' : msg.role;
         // Extract the text from the nested content
-        const content = msg.content[0]?.text || '';
+        const content = Array.isArray(msg.content) && msg.content[0] && typeof msg.content[0] === 'object' && 'text' in msg.content[0] 
+          ? msg.content[0].text 
+          : '';
         return { role, content } as ChatCompletionMessageParam;
       });
       
       // Fall back to gpt-3.5-turbo
       const fallbackCompletion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-3.5-turbo",
         messages: standardMessages,
+        max_tokens: 250,
         temperature: 0.7,
       });
       

@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Environment, PerspectiveCamera } from '@react-three/drei';
+import { OrbitControls, Environment, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Fallback model if no custom model is available
@@ -191,18 +191,6 @@ function JarvisModel({ isListening, isSpeaking }: { isListening?: boolean; isSpe
   // return <primitive object={scene} scale={[1, 1, 1]} position={[0, 0, 0]} />;
   
   return <DefaultJarvisModel isListening={isListening} isSpeaking={isSpeaking} />;
-}
-
-// Fallback for when WebGL is loading or fails
-function CanvasErrorBoundary() {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white">
-      <div className="text-center p-4">
-        <div className="text-2xl mb-2">⚠️</div>
-        <p>Loading 3D scene...</p>
-      </div>
-    </div>
-  );
 }
 
 export default function JarvisScene({ isListening, isSpeaking }: { isListening?: boolean; isSpeaking?: boolean }) {
