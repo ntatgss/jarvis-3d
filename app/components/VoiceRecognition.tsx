@@ -500,6 +500,67 @@ export default function useVoiceRecognition({
     }
   }, [audioElement]);
 
+  // Helper function to get iOS voices by gender
+  const getIOSVoiceByGender = useCallback((gender: 'male' | 'female') => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+    
+    // Force load voices
+    const voices = window.speechSynthesis.getVoices();
+    console.log(`Getting iOS ${gender} voice from ${voices.length} voices`);
+    
+    // iOS has specific voice names we can target
+    if (gender === 'male') {
+      // First try to find specific male voices by name
+      const maleVoices = [
+        'Daniel', 'Alex', 'Fred', 'Tom', 'Arthur', 'Aaron', 'Albert', 'Bruce',
+        'Male', 'Guy', 'en-US-ArrowNeural', 'en-GB-RyanNeural'
+      ];
+      
+      // Try each male voice name
+      for (const maleName of maleVoices) {
+        const voice = voices.find(v => 
+          v.name.toLowerCase().includes(maleName.toLowerCase())
+        );
+        if (voice) {
+          console.log(`Found iOS male voice: ${voice.name}`);
+          return voice;
+        }
+      }
+    } else {
+      // First try to find specific female voices by name
+      const femaleVoices = [
+        'Samantha', 'Karen', 'Moira', 'Tessa', 'Veena', 'Victoria', 'Fiona',
+        'Female', 'Woman', 'en-US-JennyNeural', 'en-GB-SoniaNeural'
+      ];
+      
+      // Try each female voice name
+      for (const femaleName of femaleVoices) {
+        const voice = voices.find(v => 
+          v.name.toLowerCase().includes(femaleName.toLowerCase())
+        );
+        if (voice) {
+          console.log(`Found iOS female voice: ${voice.name}`);
+          return voice;
+        }
+      }
+    }
+    
+    // If no specific voice found, try to find any English voice
+    const englishVoice = voices.find(v => v.lang.startsWith('en'));
+    if (englishVoice) {
+      console.log(`Using generic English voice for ${gender}: ${englishVoice.name}`);
+      return englishVoice;
+    }
+    
+    // Last resort: use any available voice
+    if (voices.length > 0) {
+      console.log(`Using first available voice for ${gender}: ${voices[0].name}`);
+      return voices[0];
+    }
+    
+    return null;
+  }, []);
+
   // Text-to-speech function
   const speak = useCallback((text: string) => {
     // Detect mobile devices using our utility
@@ -512,23 +573,48 @@ export default function useVoiceRecognition({
     }
     
     if (supportsSpeechSynthesis()) {
-      console.log('Speaking with browser TTS:', text);
+      console.log('Speaking with browser TTS:', text, 'Preferred gender:', preferredGender);
       onSpeakingChangeRef.current(true);
       
       // Simple browser detection - only care about iOS
       const isIOS = isIOSDevice();
       
+      // Force load voices if needed
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        // Force load voices
+        window.speechSynthesis.getVoices();
+      }
+      
       const utterance = new SpeechSynthesisUtterance(text);
       
-      // For iOS, we need to use a different voice
+      // For iOS, we need special handling
       if (isIOS) {
-        // Get available voices
-        const voices = window.speechSynthesis.getVoices();
-        // Try to find an English voice
-        const englishVoice = voices.find(v => v.lang.startsWith('en'));
-        if (englishVoice) {
-          utterance.voice = englishVoice;
+        console.log('iOS detected, using special voice handling');
+        
+        // Force a specific voice for each gender on iOS
+        const genderToUse = preferredGender === 'lmnt' ? 'female' : preferredGender;
+        console.log('Using gender on iOS:', genderToUse);
+        
+        // Set voice properties based on gender
+        if (genderToUse === 'male') {
+          // Force male voice characteristics
+          utterance.pitch = 0.7;  // Lower pitch for male voice
+          utterance.rate = 0.9;   // Slightly slower rate
+        } else {
+          // Force female voice characteristics
+          utterance.pitch = 1.2;  // Higher pitch for female voice
+          utterance.rate = 1.0;   // Normal rate
         }
+        
+        // Use our helper to find the best voice
+        const selectedVoice = getIOSVoiceByGender(genderToUse);
+        if (selectedVoice) {
+          console.log(`Using iOS ${genderToUse} voice:`, selectedVoice.name);
+          utterance.voice = selectedVoice;
+        }
+        
+        // Set volume to maximum
+        utterance.volume = 1.0;
       } else {
         // NON-iOS BROWSERS
         const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
@@ -592,7 +678,7 @@ export default function useVoiceRecognition({
       console.error('Speech synthesis not supported in this browser');
       onSpeakingChangeRef.current(false);
     }
-  }, [voices, findVoiceByGender, preferredGender, speakWithLMNT]);
+  }, [voices, findVoiceByGender, preferredGender, speakWithLMNT, getIOSVoiceByGender]);
 
   return {
     isListening,

@@ -298,22 +298,28 @@ export default function JarvisInterface() {
     // Detect mobile devices using our utility
     const isMobile = isMobileDevice();
     
+    console.log("Current voice gender:", voiceGender);
+    console.log("Is mobile device:", isMobile);
+    
     setVoiceGender((prev) => {
       // If on mobile and trying to switch to LMNT, skip to male
       if (DISABLE_LMNT_ON_MOBILE && isMobile && prev === "female") {
         // Show a message that LMNT is not available on mobile
         setError("Advanced voice is not available on mobile devices. Using standard voice instead.");
         setTimeout(() => setError(null), 3000); // Clear error after 3 seconds
+        console.log("Skipping LMNT on mobile, switching to male voice");
         return "male";
       }
       
-      if (prev === "male") return "female";
-      if (prev === "female") return "lmnt";
-      return "male";
+      const newVoice = prev === "male" ? "female" : prev === "female" ? "lmnt" : "male";
+      console.log(`Switching voice from ${prev} to ${newVoice}`);
+      return newVoice;
     });
-    
-    // Log the change
-    console.log(`Voice gender switched to ${voiceGender === "male" ? "female" : voiceGender === "female" ? "lmnt" : "male"}`);
+  }, []);
+  
+  // Log when voice gender changes
+  useEffect(() => {
+    console.log(`Voice gender changed to: ${voiceGender}`);
   }, [voiceGender]);
 
   // Toggle chat minimized state
