@@ -199,196 +199,139 @@ export default function useVoiceRecognition({
       console.log('Speaking:', text);
       onSpeakingChangeRef.current(true);
       
-      // Enhanced browser detection for iOS Safari
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      const isiOSSafari = isSafari && isiOS;
+      // Simple browser detection - only care about iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      console.log(`Device detected: ${isIOS ? 'iOS' : 'Other'}`);
       
-      console.log(`Browser detected: ${isiOSSafari ? 'iOS Safari' : isSafari ? 'Desktop Safari' : 'Other'}`);
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      
-      // iOS often works better with slower rate and higher volume
-      if (isiOSSafari) {
-        utterance.rate = 0.9;
-        utterance.volume = 1.0;
-        utterance.pitch = 1.1;
+      if (isIOS) {
+        // ULTRA SIMPLIFIED iOS APPROACH
+        try {
+          console.log('Using simplified iOS approach');
+          
+          // First, make sure any existing speech is canceled
+          window.speechSynthesis.cancel();
+          
+          // Create the simplest possible utterance
+          const iosUtterance = new SpeechSynthesisUtterance(text);
+          
+          // Basic settings - no frills
+          iosUtterance.volume = 1.0;  // Maximum volume
+          iosUtterance.rate = 1.0;    // Default rate
+          
+          // Critical: Set onend and onerror handlers
+          iosUtterance.onend = () => {
+            console.log('iOS speech ended');
+            onSpeakingChangeRef.current(false);
+          };
+          
+          iosUtterance.onerror = (event) => {
+            console.error('iOS speech error:', event.type);
+            onSpeakingChangeRef.current(false);
+          };
+          
+          // On iOS, try to force audio context to become active
+          if (typeof AudioContext !== 'undefined' || typeof (window as any).webkitAudioContext !== 'undefined') {
+            // Create a short beep to "wake up" the audio system
+            try {
+              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+              const audioCtx = new AudioContextClass();
+              const oscillator = audioCtx.createOscillator();
+              oscillator.type = 'sine';
+              oscillator.frequency.setValueAtTime(500, audioCtx.currentTime);
+              oscillator.connect(audioCtx.destination);
+              oscillator.start();
+              oscillator.stop(audioCtx.currentTime + 0.01);
+              
+              console.log('Audio context initialized');
+              
+              // If audio context is suspended (common on iOS), try to resume it
+              if (audioCtx.state === 'suspended') {
+                audioCtx.resume().then(() => {
+                  console.log('Audio context resumed');
+                });
+              }
+            } catch (e) {
+              console.log('Audio context initialization failed, but continuing');
+            }
+          }
+          
+          console.log('Attempting iOS speech');
+          
+          // Force a small delay
+          setTimeout(() => {
+            window.speechSynthesis.speak(iosUtterance);
+            console.log('Speech command executed on iOS');
+            
+            // iOS often needs another nudge after a short delay
+            setTimeout(() => {
+              if (window.speechSynthesis.paused) {
+                console.log('Speech synthesis was paused, resuming');
+                window.speechSynthesis.resume();
+              }
+            }, 250);
+          }, 100);
+          
+        } catch (e) {
+          console.error('Error in iOS speech:', e);
+          onSpeakingChangeRef.current(false);
+        }
       } else {
+        // NON-iOS BROWSERS
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
-      }
-      
-      // Improved voice selection with better logging
-      let availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
-      console.log(`Available voices: ${availableVoices.length}`);
-      
-      // iOS Safari sometimes needs multiple attempts to get voices
-      if (availableVoices.length === 0 && (isSafari || isiOSSafari)) {
-        console.log('No voices available in Safari, forcing voice refresh');
         
-        // Force the speechSynthesis to update
-        window.speechSynthesis.cancel();
+        // Get available voices
+        const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
+        console.log(`Available voices: ${availableVoices.length}`);
         
-        // Attempt to get voices again
-        availableVoices = window.speechSynthesis.getVoices();
-        console.log(`Voices after forced refresh: ${availableVoices.length}`);
-      }
-      
-      // Try to find a good voice with more fallbacks
-      let preferredVoice = null;
-      
-      if (isiOSSafari) {
-        // iOS Safari - try to get an explicitly English voice
-        console.log('Finding voice for iOS Safari');
-        // Log all available voices for debugging
-        availableVoices.forEach((v, i) => {
-          console.log(`Voice ${i}: ${v.name}, Lang: ${v.lang}, Default: ${v.default}`);
-        });
-        
-        // On iOS, try to use the default voice first as it's most reliable
-        preferredVoice = availableVoices.find(voice => voice.default);
-        
-        // If no default voice, try to find an English one
-        if (!preferredVoice) {
-          preferredVoice = availableVoices.find(voice => 
-            voice.lang.startsWith('en') || voice.name.includes('English')
-          );
-        }
-      } else if (isSafari) {
-        // Desktop Safari
-        preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
-      } else {
-        // Other browsers
-        preferredVoice = availableVoices.find(voice => 
+        // Try to find a good voice
+        let preferredVoice = availableVoices.find(voice => 
           voice.name.includes('Google') && voice.lang.startsWith('en')
         );
-
+        
         if (!preferredVoice) {
           preferredVoice = availableVoices.find(voice => 
             voice.lang.startsWith('en') && (voice.name.includes('Male') || voice.name.includes('English'))
           );
         }
-
+        
         if (!preferredVoice && availableVoices.length > 0) {
           // Fallback to any English voice
           preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
         }
-      }
-
-      if (preferredVoice) {
-        console.log('Using voice:', preferredVoice.name);
-        utterance.voice = preferredVoice;
-      } else if (availableVoices.length > 0) {
-        // Last resort: use the first available voice
-        console.log('Using default voice:', availableVoices[0].name);
-        utterance.voice = availableVoices[0];
-      } else {
-        console.log('No voices available, using browser default');
-      }
-      
-      utterance.onend = () => {
-        console.log('Speech ended');
-        onSpeakingChangeRef.current(false);
-      };
-      
-      utterance.onerror = (event) => {
-        // Improved error logging with more details
-        console.error('Speech synthesis error:', {
-          error: event.error,
-          name: event.name,
-          timeStamp: event.timeStamp,
-          type: event.type
-        });
-        onSpeakingChangeRef.current(false);
-      };
-      
-      // iOS-specific handling
-      if (isiOSSafari) {
-        console.log('Using iOS Safari speech approach');
         
-        // iOS requires user interaction to play audio
-        // We'll use a simpler approach without timeout
-        try {
-          // Make sure any pending speech is canceled
-          window.speechSynthesis.cancel();
-          
-          // iOS sometimes needs a small pause
-          setTimeout(() => {
-            try {
-              console.log('Speaking on iOS Safari');
-              // Speak with shorter text chunks if the text is long
-              if (text.length > 100) {
-                // iOS can sometimes struggle with long text
-                const chunks = text.match(/.{1,100}(?=\s|$|\n|\.|\?|\!)/g) || [text];
-                console.log(`Speaking in ${chunks.length} chunks`);
-                
-                // Speak the first chunk immediately
-                const firstChunk = new SpeechSynthesisUtterance(chunks[0]);
-                if (preferredVoice) firstChunk.voice = preferredVoice;
-                firstChunk.rate = utterance.rate;
-                firstChunk.pitch = utterance.pitch;
-                firstChunk.volume = utterance.volume;
-                window.speechSynthesis.speak(firstChunk);
-                
-                // Queue the rest with delays to avoid iOS cutting off
-                if (chunks.length > 1) {
-                  for (let i = 1; i < chunks.length; i++) {
-                    const chunkUtterance = new SpeechSynthesisUtterance(chunks[i]);
-                    if (preferredVoice) chunkUtterance.voice = preferredVoice;
-                    chunkUtterance.rate = utterance.rate;
-                    chunkUtterance.pitch = utterance.pitch;
-                    chunkUtterance.volume = utterance.volume;
-                    
-                    // For the last chunk, add the onend handler
-                    if (i === chunks.length - 1) {
-                      chunkUtterance.onend = () => {
-                        console.log('Final chunk speech ended');
-                        onSpeakingChangeRef.current(false);
-                      };
-                    }
-                    
-                    window.speechSynthesis.speak(chunkUtterance);
-                  }
-                }
-              } else {
-                // For short text, use the original utterance
-                window.speechSynthesis.speak(utterance);
-              }
-            } catch (e) {
-              console.error('iOS speech attempt error:', e);
-              onSpeakingChangeRef.current(false);
-            }
-          }, 50);
-        } catch (e) {
-          console.error('iOS Safari speech error:', e);
-          onSpeakingChangeRef.current(false);
+        if (preferredVoice) {
+          console.log('Using voice:', preferredVoice.name);
+          utterance.voice = preferredVoice;
+        } else if (availableVoices.length > 0) {
+          console.log('Using default voice:', availableVoices[0].name);
+          utterance.voice = availableVoices[0];
         }
-      } else if (isSafari) {
-        // Desktop Safari needs a cleaner approach
-        try {
-          if (window.speechSynthesis.pending) {
-            window.speechSynthesis.cancel();
-          }
-          
-          console.log('Speaking in Desktop Safari');
-          window.speechSynthesis.speak(utterance);
-        } catch (e) {
-          console.error('Safari speech error:', e);
+        
+        utterance.onend = () => {
+          console.log('Speech ended');
           onSpeakingChangeRef.current(false);
-        }
-      } else {
-        // For other browsers, use the more complex approach
-        // Cancel any previous speech
+        };
+        
+        utterance.onerror = (event) => {
+          console.error('Speech synthesis error:', {
+            error: event.error,
+            name: event.name,
+            type: event.type
+          });
+          onSpeakingChangeRef.current(false);
+        };
+        
+        // Standard approach for other browsers
         window.speechSynthesis.cancel();
         
-        // Check if synthesis is paused (common Chrome issue)
         if (window.speechSynthesis.paused) {
           window.speechSynthesis.resume();
         }
         
-        // Then speak the new text with better error handling
         setTimeout(() => {
           try {
             window.speechSynthesis.speak(utterance);
@@ -396,7 +339,7 @@ export default function useVoiceRecognition({
             console.error('Error during speak call:', e);
             onSpeakingChangeRef.current(false);
           }
-        }, 250); // Longer timeout to ensure cancel completes
+        }, 250);
       }
     } else {
       console.error('Speech synthesis not supported in this browser');
