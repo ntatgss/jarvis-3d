@@ -266,29 +266,39 @@ export default function useVoiceRecognition({
     return voice;
   }, []);
 
-  // Function to use LMNT API for speech
+  // LMNT speech function
   const speakWithLMNT = useCallback(async (text: string) => {
     if (!audioElement) return;
     
+    // Detect iOS devices
+    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    
+    console.log('Speaking with LMNT:', text);
+    onSpeakingChangeRef.current(true);
+    
+    // Signal that LMNT is loading
+    if (onLmntLoadingChangeRef.current) {
+      onLmntLoadingChangeRef.current(true);
+    }
+    
     try {
       console.log('Using Advanced voice for speech');
-      onSpeakingChangeRef.current(true);
-      
-      // Notify that LMNT is loading
-      if (onLmntLoadingChangeRef.current) {
-        onLmntLoadingChangeRef.current(true);
-      }
       
       // Stop any current playback
       audioElement.pause();
       
-      // For iOS, try to unlock audio context first
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (isIOS) {
+      // For mobile devices, try to unlock audio context first
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
         try {
+          console.log('Attempting to unlock audio on mobile device');
+          
           // Create a short silent sound and play it to unlock audio
           const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
           const audioCtx = new AudioContext();
+          console.log('Mobile audio context state:', audioCtx.state);
+          
           const oscillator = audioCtx.createOscillator();
           oscillator.type = 'sine';
           oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
@@ -298,71 +308,164 @@ export default function useVoiceRecognition({
           
           if (audioCtx.state === 'suspended') {
             await audioCtx.resume();
+            console.log('Resumed audio context, new state:', audioCtx.state);
           }
           
-          console.log('iOS audio context unlocked for Advanced voice');
+          // For iOS, we need an additional step with user interaction
+          if (isIOS) {
+            // Create a temporary button for user interaction
+            const tempButton = document.createElement('button');
+            tempButton.style.position = 'fixed';
+            tempButton.style.top = '0';
+            tempButton.style.left = '0';
+            tempButton.style.width = '100%';
+            tempButton.style.height = '100%';
+            tempButton.style.backgroundColor = 'rgba(0,0,0,0.01)';
+            tempButton.style.zIndex = '9999';
+            tempButton.style.border = 'none';
+            tempButton.style.outline = 'none';
+            tempButton.style.cursor = 'pointer';
+            tempButton.textContent = 'Tap to enable audio';
+            
+            // Add click handler to unlock audio
+            const clickHandler = () => {
+              document.body.removeChild(tempButton);
+              audioCtx.resume().then(() => {
+                console.log('iOS audio context resumed after user interaction');
+              });
+            };
+            
+            tempButton.addEventListener('click', clickHandler, { once: true });
+            document.body.appendChild(tempButton);
+            
+            // Auto-remove after 5 seconds if not clicked
+            setTimeout(() => {
+              if (document.body.contains(tempButton)) {
+                document.body.removeChild(tempButton);
+              }
+            }, 5000);
+          }
+          
+          console.log('Mobile audio context initialized');
         } catch (e) {
-          console.warn('Could not unlock iOS audio context:', e);
+          console.warn('Could not unlock mobile audio context:', e);
         }
       }
       
-      // Call our API route
-      const response = await fetch('/api/lmnt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          text,
-          voice: 'lily' // Default LMNT voice
-        }),
-      });
+      // Call our API route with a longer timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      if (!response.ok) {
-        throw new Error('Failed to generate speech with Advanced voice');
-      }
-      
-      // Get the audio blob
-      const audioBlob = await response.blob();
-      
-      // LMNT loading is complete
-      if (onLmntLoadingChangeRef.current) {
-        onLmntLoadingChangeRef.current(false);
-      }
-      
-      // Create a URL for the blob
-      const audioUrl = URL.createObjectURL(audioBlob);
-      
-      // Set the audio source and play
-      audioElement.src = audioUrl;
-      
-      // For iOS, we need to handle play differently
-      if (isIOS) {
-        // Add event listeners for iOS
-        const playHandler = () => {
-          document.removeEventListener('touchend', playHandler);
-          console.log('Playing audio on iOS after user interaction');
-          audioElement.play().catch(e => console.error('iOS play error:', e));
-        };
+      try {
+        const response = await fetch('/api/lmnt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            text,
+            voice: 'lily' // Default LMNT voice
+          }),
+          signal: controller.signal
+        });
         
-        // Try to play immediately
-        const playPromise = audioElement.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.warn('iOS autoplay failed, waiting for user interaction:', error);
-            // Set up listener for next user interaction
-            document.addEventListener('touchend', playHandler, { once: true });
-          });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to generate speech with Advanced voice: ${response.status}`);
         }
-      } else {
-        // Normal play for non-iOS devices
-        const playPromise = audioElement.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error('Error playing audio:', error);
+        
+        // Get the audio blob
+        const audioBlob = await response.blob();
+        
+        // LMNT loading is complete
+        if (onLmntLoadingChangeRef.current) {
+          onLmntLoadingChangeRef.current(false);
+        }
+        
+        // Create a URL for the blob
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Set the audio source
+        audioElement.src = audioUrl;
+        audioElement.load(); // Important for mobile
+        
+        // For mobile devices, we need special handling
+        if (isMobile) {
+          console.log('Setting up mobile audio playback');
+          
+          // Set up event listeners
+          audioElement.oncanplaythrough = () => {
+            console.log('Audio can play through, attempting playback');
+            const playPromise = audioElement.play();
+            if (playPromise !== undefined) {
+              playPromise.then(() => {
+                console.log('Mobile audio playback started successfully');
+              }).catch(error => {
+                console.warn('Mobile autoplay failed, waiting for user interaction:', error);
+                
+                // Create a play button that follows iOS rules
+                const playButton = document.createElement('button');
+                playButton.innerText = 'Tap to Play Voice';
+                playButton.style.position = 'fixed';
+                playButton.style.bottom = '20px';
+                playButton.style.left = '50%';
+                playButton.style.transform = 'translateX(-50%)';
+                playButton.style.zIndex = '9999';
+                playButton.style.padding = '10px 20px';
+                playButton.style.backgroundColor = '#0066ff';
+                playButton.style.color = 'white';
+                playButton.style.border = 'none';
+                playButton.style.borderRadius = '20px';
+                playButton.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+                
+                playButton.onclick = () => {
+                  audioElement.play().then(() => {
+                    document.body.removeChild(playButton);
+                  }).catch(e => {
+                    console.error('Play failed even with user interaction:', e);
+                    document.body.removeChild(playButton);
+                    onSpeakingChangeRef.current(false);
+                  });
+                };
+                
+                document.body.appendChild(playButton);
+                
+                // Auto-remove after 10 seconds
+                setTimeout(() => {
+                  if (document.body.contains(playButton)) {
+                    document.body.removeChild(playButton);
+                    onSpeakingChangeRef.current(false);
+                  }
+                }, 10000);
+              });
+            }
+          };
+          
+          // Handle errors
+          audioElement.onerror = (e) => {
+            console.error('Mobile audio error:', e);
             onSpeakingChangeRef.current(false);
-          });
+          };
+          
+          // Handle completion
+          audioElement.onended = () => {
+            console.log('Mobile audio playback completed');
+            onSpeakingChangeRef.current(false);
+          };
+        } else {
+          // Normal play for desktop devices
+          const playPromise = audioElement.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.error('Error playing audio:', error);
+              onSpeakingChangeRef.current(false);
+            });
+          }
         }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
       }
     } catch (error) {
       console.error('Advanced voice error:', error);
@@ -378,8 +481,25 @@ export default function useVoiceRecognition({
         try {
           console.log('Falling back to browser TTS');
           const utterance = new SpeechSynthesisUtterance(text);
+          
+          // For iOS, we need to use a different voice
+          if (isIOS) {
+            // Get available voices
+            const voices = window.speechSynthesis.getVoices();
+            // Try to find an English voice
+            const englishVoice = voices.find(v => v.lang.startsWith('en'));
+            if (englishVoice) {
+              utterance.voice = englishVoice;
+            }
+          }
+          
           utterance.onend = () => onSpeakingChangeRef.current(false);
           utterance.onerror = () => onSpeakingChangeRef.current(false);
+          
+          // Set a volume and rate that works well on mobile
+          utterance.volume = 1.0;
+          utterance.rate = 0.9;
+          
           window.speechSynthesis.speak(utterance);
         } catch (e) {
           console.error('Fallback TTS error:', e);
@@ -402,131 +522,21 @@ export default function useVoiceRecognition({
       onSpeakingChangeRef.current(true);
       
       // Simple browser detection - only care about iOS
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      console.log(`Device detected: ${isIOS ? 'iOS' : 'Other'}`);
+      const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
       
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // For iOS, we need to use a different voice
       if (isIOS) {
-        // ULTRA SIMPLIFIED iOS APPROACH
-        try {
-          console.log('Using simplified iOS approach');
-          
-          // First, make sure any existing speech is canceled
-          window.speechSynthesis.cancel();
-          
-          // Create the simplest possible utterance
-          const iosUtterance = new SpeechSynthesisUtterance(text);
-          
-          // Try to find a voice - log all available voices for debugging
-          const availableVoices = window.speechSynthesis.getVoices();
-          console.log(`iOS available voices: ${availableVoices.length}`);
-          if (availableVoices.length > 0) {
-            console.log('iOS voices:');
-            availableVoices.forEach((voice, index) => {
-              console.log(`Voice ${index}: ${voice.name}, Lang: ${voice.lang}, Default: ${voice.default}`);
-            });
-            
-            // Find voice based on gender preference for iOS
-            const preferredVoice = findVoiceByGender(availableVoices, preferredGender as 'male' | 'female');
-            if (preferredVoice) {
-              console.log(`Using iOS ${preferredGender} voice:`, preferredVoice.name);
-              iosUtterance.voice = preferredVoice;
-            } else {
-              // Fallback to any English voice if gender-specific not found
-              const englishVoice = availableVoices.find(v => v.lang.startsWith('en'));
-              if (englishVoice) {
-                console.log(`Using iOS English voice:`, englishVoice.name);
-                iosUtterance.voice = englishVoice;
-              }
-            }
-          }
-          
-          // Basic settings - no frills
-          iosUtterance.volume = 1.0;  // Maximum volume
-          iosUtterance.rate = 0.9;    // Slightly slower rate for iOS
-          
-          // Critical: Set onend and onerror handlers
-          iosUtterance.onend = () => {
-            console.log('iOS speech ended');
-            onSpeakingChangeRef.current(false);
-          };
-          
-          iosUtterance.onerror = (event) => {
-            console.error('iOS speech error:', event.type);
-            onSpeakingChangeRef.current(false);
-          };
-          
-          // On iOS, try to force audio context to become active
-          if (typeof AudioContext !== 'undefined' || typeof (window as any).webkitAudioContext !== 'undefined') {
-            // Create a short beep to "wake up" the audio system
-            try {
-              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-              const audioCtx = new AudioContextClass();
-              console.log('iOS Audio context state:', audioCtx.state);
-              
-              const oscillator = audioCtx.createOscillator();
-              oscillator.type = 'sine';
-              oscillator.frequency.setValueAtTime(500, audioCtx.currentTime);
-              oscillator.connect(audioCtx.destination);
-              oscillator.start();
-              oscillator.stop(audioCtx.currentTime + 0.01);
-              
-              console.log('Audio context initialized');
-              
-              // If audio context is suspended (common on iOS), try to resume it
-              if (audioCtx.state === 'suspended') {
-                audioCtx.resume().then(() => {
-                  console.log('Audio context resumed');
-                });
-              }
-            } catch (e) {
-              console.log('Audio context initialization failed, but continuing');
-            }
-          }
-          
-          console.log('Attempting iOS speech');
-          
-          // Force a small delay
-          setTimeout(() => {
-            window.speechSynthesis.speak(iosUtterance);
-            console.log('Speech command executed on iOS');
-            
-            // iOS often needs another nudge after a short delay
-            setTimeout(() => {
-              // Check if we're still paused or pending
-              const speechState = {
-                paused: window.speechSynthesis.paused,
-                pending: window.speechSynthesis.pending,
-                speaking: window.speechSynthesis.speaking
-              };
-              console.log('iOS speech state after 250ms:', speechState);
-              
-              if (window.speechSynthesis.paused) {
-                console.log('Speech synthesis was paused, resuming');
-                window.speechSynthesis.resume();
-              }
-              
-              // Force another pause/resume cycle if needed
-              if (!window.speechSynthesis.speaking && window.speechSynthesis.pending) {
-                console.log('Speech not started yet, trying pause/resume cycle');
-                window.speechSynthesis.pause();
-                setTimeout(() => window.speechSynthesis.resume(), 50);
-              }
-            }, 250);
-          }, 100);
-          
-        } catch (e) {
-          console.error('Error in iOS speech:', e);
-          onSpeakingChangeRef.current(false);
-        }
-      } else {
-        // NON-iOS BROWSERS
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        
         // Get available voices
+        const voices = window.speechSynthesis.getVoices();
+        // Try to find an English voice
+        const englishVoice = voices.find(v => v.lang.startsWith('en'));
+        if (englishVoice) {
+          utterance.voice = englishVoice;
+        }
+      } else if (preferredGender === 'male') {
+        // NON-iOS BROWSERS
         const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
         console.log(`Available voices: ${availableVoices.length}`);
         
@@ -540,48 +550,48 @@ export default function useVoiceRecognition({
           console.log('Using default voice:', availableVoices[0].name);
           utterance.voice = availableVoices[0];
         }
+      }
+      
+      utterance.onend = () => {
+        console.log('Speech ended');
+        onSpeakingChangeRef.current(false);
+      };
+      
+      utterance.onerror = (event) => {
+        // More defensive error logging that works across browsers
+        const errorDetails: Record<string, any> = {};
         
-        utterance.onend = () => {
-          console.log('Speech ended');
-          onSpeakingChangeRef.current(false);
-        };
-        
-        utterance.onerror = (event) => {
-          // More defensive error logging that works across browsers
-          const errorDetails: Record<string, any> = {};
-          
-          // Safely extract properties
-          try {
-            if (event.hasOwnProperty('error')) errorDetails['error'] = event.error;
-            if (event.hasOwnProperty('name')) errorDetails['name'] = event.name;
-            if (event.hasOwnProperty('type')) errorDetails['type'] = event.type;
-          } catch (e) {
-            // If accessing properties fails, just log a simpler message
-          }
-          
-          // Log the error with whatever details we could extract
-          console.error('Speech synthesis error:', errorDetails);
-          
-          // Always ensure we update the speaking state
-          onSpeakingChangeRef.current(false);
-        };
-        
-        // Standard approach for other browsers
-        window.speechSynthesis.cancel();
-        
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
+        // Safely extract properties
+        try {
+          if (event.hasOwnProperty('error')) errorDetails['error'] = event.error;
+          if (event.hasOwnProperty('name')) errorDetails['name'] = event.name;
+          if (event.hasOwnProperty('type')) errorDetails['type'] = event.type;
+        } catch (e) {
+          // If accessing properties fails, just log a simpler message
         }
         
-        setTimeout(() => {
-          try {
-            window.speechSynthesis.speak(utterance);
-          } catch (e) {
-            console.error('Error during speak call:', e);
-            onSpeakingChangeRef.current(false);
-          }
-        }, 250);
+        // Log the error with whatever details we could extract
+        console.error('Speech synthesis error:', errorDetails);
+        
+        // Always ensure we update the speaking state
+        onSpeakingChangeRef.current(false);
+      };
+      
+      // Standard approach for other browsers
+      window.speechSynthesis.cancel();
+      
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
       }
+      
+      setTimeout(() => {
+        try {
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          console.error('Error during speak call:', e);
+          onSpeakingChangeRef.current(false);
+        }
+      }, 250);
     } else {
       console.error('Speech synthesis not supported in this browser');
       onSpeakingChangeRef.current(false);

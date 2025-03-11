@@ -9,6 +9,9 @@ When asked about your identity, always remember that you are Jarvis.
 Your responses should be helpful, informative, and somewhat concise.
 Try to maintain a slightly formal but friendly tone, similar to the Jarvis AI from Iron Man.`;
 
+// Set a longer timeout for the API request (60 seconds)
+export const maxDuration = 60; // This sets the Vercel Edge Function timeout to 60 seconds
+
 // // Type for o3-mini format messages
 // interface O3ContentItem {
 //   type: 'text';
@@ -28,9 +31,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Initialize the OpenAI client
+    // Initialize the OpenAI client with a longer timeout
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      timeout: 60000, // 60 seconds timeout
     });
 
     // Prepare messages array for OpenAI API

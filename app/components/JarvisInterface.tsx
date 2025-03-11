@@ -301,8 +301,37 @@ export default function JarvisInterface() {
 
   // Toggle chat minimized state
   const toggleChatMinimized = () => {
-    setIsChatMinimized(!isChatMinimized)
+    const newMinimizedState = !isChatMinimized;
+    setIsChatMinimized(newMinimizedState);
+    
+    // Toggle body class for global styling
+    if (typeof document !== 'undefined') {
+      if (newMinimizedState) {
+        document.body.classList.add('chat-is-minimized');
+        
+        // Force a small delay to ensure styles are applied
+        setTimeout(() => {
+          const chatButton = document.querySelector('.fixed-chat-button');
+          if (chatButton) {
+            (chatButton as HTMLElement).style.display = 'flex';
+            (chatButton as HTMLElement).style.opacity = '1';
+          }
+        }, 50);
+      } else {
+        document.body.classList.remove('chat-is-minimized');
+      }
+    }
   }
+
+  // Set/remove body class on mount/unmount
+  useEffect(() => {
+    // Clean up function to remove class when component unmounts
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('chat-is-minimized');
+      }
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden relative bg-gradient-to-b from-gray-900 to-black">
@@ -315,18 +344,24 @@ export default function JarvisInterface() {
         <div className="absolute bottom-[20%] left-[20%] w-[25%] h-[25%] bg-gradient-radial from-cyan-900/10 to-transparent rounded-full mix-blend-overlay animate-pulse"></div>
       </div>
 
-      {/* Title Overlay - moved to higher z-index and positioned absolutely */}
-      <div className="absolute top-0 left-0 right-0 z-30 p-4 md:p-0 md:top-4 md:left-4 md:right-auto">
-        <div className="max-w-[280px] mx-auto md:mx-0">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent drop-shadow-md">
+      {/* Title Overlay - keep visible even when minimized */}
+      <div className={`title-container absolute z-30 transition-all duration-300 ${
+        isChatMinimized 
+          ? "top-2 left-4 right-4 md:top-4 md:left-4 md:right-auto" 
+          : "top-0 left-0 right-0 p-4 md:p-0 md:top-4 md:left-4 md:right-auto"
+      }`}>
+        <div className={`${isChatMinimized ? "max-w-full md:max-w-[280px]" : "max-w-[280px]"} mx-auto md:mx-0`}>
+          <h1 className={`font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent drop-shadow-md ${
+            isChatMinimized ? "text-xl md:text-2xl" : "text-2xl"
+          }`}>
             Jarvis AI
           </h1>
           <p className="text-gray-400 text-sm">Voice-Activated Assistant</p>
 
-          {/* Voice gender toggle */}
+          {/* Voice gender toggle - keep visible even when minimized */}
           <button
             onClick={toggleVoiceGender}
-            className="mt-2 w-full md:w-auto bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg transition-all duration-300 justify-center md:justify-start"
+            className={`mt-2 w-full md:w-auto bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg transition-all duration-300 justify-center md:justify-start`}
             title={`Switch to ${voiceGender === "male" ? "female" : voiceGender === "female" ? "Advanced" : "male"} voice`}
           >
             {voiceGender === "male" ? <Male className="w-3.5 h-3.5" /> : 
@@ -339,7 +374,7 @@ export default function JarvisInterface() {
 
           {/* LMNT voice info - only show when LMNT is selected */}
           {voiceGender === "lmnt" && (
-            <div className="mt-2 text-xs text-gray-400 max-w-[280px]">
+            <div className={`mt-2 text-xs text-gray-400 max-w-[280px]`}>
               Advanced voice provides high-quality AI voice synthesis. Generation may take a moment.
             </div>
           )}
@@ -357,7 +392,7 @@ export default function JarvisInterface() {
                   }
                 }
               }}
-              className="mt-2 w-full md:w-auto bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg transition-all duration-300 justify-center md:justify-start"
+              className={`mt-2 w-full md:w-auto bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg transition-all duration-300 justify-center md:justify-start`}
             >
               Test Voice
             </button>
@@ -365,14 +400,14 @@ export default function JarvisInterface() {
         </div>
       </div>
 
-      {/* 3D Scene Container - adjusted to be centered vertically */}
+      {/* 3D Scene Container - keep visible even when minimized */}
       <div
-        className="w-full relative flex-none z-10 flex items-center justify-center"
+        className={`w-full relative flex-none z-10 flex items-center justify-center`}
         style={{
-          height: "45vh", // Reduced from 55vh to give more space for chat on mobile
-          minHeight: "200px", // Reduced from 250px
-          marginTop: "calc(80px + 1rem)", // Account for title height on mobile
-          marginBottom: "0.5rem", // Reduced from 1rem
+          height: "40vh",
+          minHeight: "180px",
+          marginTop: isChatMinimized ? "calc(40px + 0.5rem)" : "calc(60px + 0.5rem)",
+          marginBottom: "0.5rem",
         }}
       >
         <JarvisScene isListening={isListening} isSpeaking={isSpeaking} />
@@ -380,27 +415,27 @@ export default function JarvisInterface() {
         {/* Status Indicators - moved to top center for better visibility */}
         <div className="absolute top-0 left-1/2 transform -translate-x-1/2 flex gap-2 z-20 mt-4 md:mt-0">
           {isListening && (
-            <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white px-4 py-2 rounded-full text-sm font-medium animate-pulse backdrop-blur-sm shadow-lg shadow-blue-500/20 flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium animate-pulse backdrop-blur-sm shadow-lg shadow-blue-500/20 flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
               </span>
               Listening
             </div>
           )}
           {isSpeaking && (
-            <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm shadow-lg shadow-indigo-500/20 flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm shadow-lg shadow-indigo-500/20 flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
               </span>
               {voiceGender === "lmnt" && isLmntLoading ? "Generating Advanced Voice" : "Speaking"}
             </div>
           )}
           {loading && (
-            <div className="bg-gradient-to-r from-amber-600 to-amber-500 text-white px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm shadow-lg shadow-amber-500/20 flex items-center gap-2">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-500 text-white px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm shadow-lg shadow-amber-500/20 flex items-center gap-2">
               <svg
-                className="animate-spin h-4 w-4 text-white"
+                className="animate-spin h-3 w-3 text-white"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -418,23 +453,31 @@ export default function JarvisInterface() {
         </div>
       </div>
 
-      {/* Chat Interface */}
-      <div className="flex-1 p-4 flex flex-col min-h-0 relative z-10">
-        {/* Mobile toggle button (visible when minimized) */}
-        {isChatMinimized && (
-          <button
-            onClick={toggleChatMinimized}
-            className="md:hidden fixed bottom-6 right-6 bg-gradient-to-r from-blue-600 to-blue-500 text-white p-3 rounded-full z-50 shadow-lg"
-            aria-label="Open Chat"
-          >
-            <Maximize className="w-5 h-5" />
-          </button>
-        )}
+      {/* Mobile toggle button (visible when minimized) - moved outside the chat container */}
+      {isChatMinimized && (
+        <button
+          onClick={toggleChatMinimized}
+          className="md:hidden fixed-chat-button bg-gradient-to-r from-blue-600 to-blue-500 text-white"
+          aria-label="Open Chat"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            <circle cx="12" cy="10" r="1"></circle>
+            <circle cx="8" cy="10" r="1"></circle>
+            <circle cx="16" cy="10" r="1"></circle>
+          </svg>
+        </button>
+      )}
 
+      {/* Spacer to push chat to bottom on mobile */}
+      <div className="flex-grow md:hidden"></div>
+
+      {/* Chat Interface - Improved for mobile and positioned at bottom */}
+      <div className="w-full md:flex-1 flex flex-col relative z-20 pb-safe md:static">
         {/* Main chat container */}
         <div
-          className={`transition-all duration-300 ease-in-out ${
-            isChatMinimized ? "md:max-w-[300px] md:h-[50px] md:overflow-hidden" : "md:max-w-md md:h-auto"
+          className={`chat-container transition-all duration-300 ${
+            isChatMinimized ? "hidden md:flex md:max-w-[300px] md:h-[50px] md:overflow-hidden" : "md:max-w-md md:h-auto"
           } bg-gray-900/80 backdrop-blur-md rounded-xl shadow-xl border border-gray-800 w-full md:absolute md:bottom-4 md:right-4 flex flex-col ${
             isChatMinimized && "md:cursor-pointer"
           }`}
@@ -464,18 +507,24 @@ export default function JarvisInterface() {
 
           {!isChatMinimized && (
             <>
-              {/* Error message */}
+              {/* Error message - improved for mobile */}
               {error && (
-                <div className="bg-red-500/90 text-white p-3 m-3 rounded-lg backdrop-blur-sm">
+                <div className="bg-red-500/90 text-white p-2 mx-2 my-1 rounded-lg backdrop-blur-sm text-sm">
                   <div className="flex items-center gap-2">
-                    <X className="w-4 h-4" />
-                    <span>{error}</span>
+                    <X className="w-4 h-4 flex-shrink-0" />
+                    <span className="line-clamp-2">{error}</span>
                   </div>
                 </div>
               )}
 
-              {/* Conversation History - reduced max height on mobile */}
-              <div className="flex-grow overflow-y-auto p-3 space-y-3 max-h-[25vh] md:max-h-[300px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+              {/* Conversation History - adjusted for better mobile experience */}
+              <div 
+                className="flex-grow overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+                style={{
+                  maxHeight: error ? "calc(25vh - 40px)" : "25vh", // Reduce height when error is present
+                  minHeight: "80px" // Ensure minimum height
+                }}
+              >
                 {conversationHistory.length === 0 ? (
                   <div className="text-gray-400 text-center py-8 flex flex-col items-center justify-center h-full">
                     <div className="text-5xl mb-3">👋</div>
@@ -506,8 +555,8 @@ export default function JarvisInterface() {
                 <div ref={conversationEndRef} />
               </div>
 
-              {/* Input Area - improved for mobile */}
-              <div className="p-3 border-t border-gray-800">
+              {/* Input Area - fixed for mobile to ensure it's always accessible */}
+              <div className="p-2 border-t border-gray-800 sticky-bottom">
                 <div className="flex gap-2">
                   <button
                     onClick={isListening ? stopListening : startListening}
@@ -525,7 +574,7 @@ export default function JarvisInterface() {
                     <input
                       type="text"
                       placeholder="Type your message..."
-                      className="flex-1 py-2 px-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 py-2 px-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       value={userMessage}
                       onChange={handleInputChange}
                       disabled={loading || isListening}
@@ -543,12 +592,12 @@ export default function JarvisInterface() {
                 </div>
               </div>
 
-              {/* Loading overlay */}
+              {/* Loading overlay - improved for mobile */}
               {loading && (
-                <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm flex items-center justify-center rounded-xl z-20 pointer-events-none">
                   <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-blue-400 font-medium">Jarvis is thinking...</p>
+                    <div className="w-12 h-12 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-blue-400 font-medium text-sm">Jarvis is thinking...</p>
                   </div>
                 </div>
               )}
