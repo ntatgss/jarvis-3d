@@ -205,24 +205,50 @@ export default function useVoiceRecognition({
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
       
+      // Safari voice handling requires special care
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      console.log(`Browser detected: ${isSafari ? 'Safari' : 'Other'}`);
+      
       // Improved voice selection with better logging
       const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
       console.log(`Available voices: ${availableVoices.length}`);
       
-      // Try to find a good voice with more fallbacks
-      let preferredVoice = availableVoices.find(voice => 
-        voice.name.includes('Google') && voice.lang.startsWith('en')
-      );
-
-      if (!preferredVoice) {
-        preferredVoice = availableVoices.find(voice => 
-          voice.lang.startsWith('en') && (voice.name.includes('Male') || voice.name.includes('English'))
-        );
+      if (availableVoices.length === 0 && isSafari) {
+        // Safari sometimes needs a little nudge to load voices
+        console.log('No voices available in Safari, attempting to reload voices');
+        setTimeout(() => {
+          const safariVoices = window.speechSynthesis.getVoices();
+          console.log(`Safari voices after reload: ${safariVoices.length}`);
+          if (safariVoices.length > 0) {
+            // Update the utterance with a voice
+            utterance.voice = safariVoices.find(v => v.lang.startsWith('en')) || safariVoices[0];
+            console.log(`Using Safari voice: ${utterance.voice?.name}`);
+          }
+        }, 100);
       }
-
-      if (!preferredVoice && availableVoices.length > 0) {
-        // Fallback to any English voice
+      
+      // Try to find a good voice with more fallbacks
+      let preferredVoice = null;
+      
+      if (isSafari) {
+        // Safari generally works better with simple voice selection
         preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
+      } else {
+        // More specific voice selection for other browsers
+        preferredVoice = availableVoices.find(voice => 
+          voice.name.includes('Google') && voice.lang.startsWith('en')
+        );
+
+        if (!preferredVoice) {
+          preferredVoice = availableVoices.find(voice => 
+            voice.lang.startsWith('en') && (voice.name.includes('Male') || voice.name.includes('English'))
+          );
+        }
+
+        if (!preferredVoice && availableVoices.length > 0) {
+          // Fallback to any English voice
+          preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
+        }
       }
 
       if (preferredVoice) {
@@ -252,23 +278,41 @@ export default function useVoiceRecognition({
         onSpeakingChangeRef.current(false);
       };
       
-      // Cancel any previous speech
-      window.speechSynthesis.cancel();
-      
-      // Check if synthesis is paused (common Chrome issue)
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
-      
-      // Then speak the new text with better error handling
-      setTimeout(() => {
+      // Safari-specific handling
+      if (isSafari) {
+        // Safari needs a cleaner approach - just speak directly
         try {
+          // Make sure voices are loaded in Safari
+          if (window.speechSynthesis.pending) {
+            window.speechSynthesis.cancel();
+          }
+          
+          console.log('Speaking in Safari');
           window.speechSynthesis.speak(utterance);
         } catch (e) {
-          console.error('Error during speak call:', e);
+          console.error('Safari speech error:', e);
           onSpeakingChangeRef.current(false);
         }
-      }, 250); // Longer timeout to ensure cancel completes
+      } else {
+        // For other browsers, use the more complex approach
+        // Cancel any previous speech
+        window.speechSynthesis.cancel();
+        
+        // Check if synthesis is paused (common Chrome issue)
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+        
+        // Then speak the new text with better error handling
+        setTimeout(() => {
+          try {
+            window.speechSynthesis.speak(utterance);
+          } catch (e) {
+            console.error('Error during speak call:', e);
+            onSpeakingChangeRef.current(false);
+          }
+        }, 250); // Longer timeout to ensure cancel completes
+      }
     } else {
       console.error('Speech synthesis not supported in this browser');
       onSpeakingChangeRef.current(false);
