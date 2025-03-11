@@ -9,11 +9,11 @@ When asked about your identity, always remember that you are Jarvis.
 Your responses should be helpful, informative, and somewhat concise.
 Try to maintain a slightly formal but friendly tone, similar to the Jarvis AI from Iron Man.`;
 
-// Type for o3-mini format messages
-interface O3ContentItem {
-  type: 'text';
-  text: string;
-}
+// // Type for o3-mini format messages
+// interface O3ContentItem {
+//   type: 'text';
+//   text: string;
+// }
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,19 +71,20 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      // Try using o3-mini model first
+      // Try using GPT-4o model
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
-        messages: apiMessages as any,
+        messages: apiMessages as any, // Type assertion needed for nested content format
         response_format: {
           type: "text"
-        },
+        }
         // reasoning_effort: "medium"
       });
       
       return NextResponse.json(completion);
     } catch (error) {
-      console.error("Error with o3-mini model, falling back to gpt-3.5-turbo:", error);
+      console.error("Error with GPT-4o model, falling back to gpt-3.5-turbo:", error);
       
       // Format messages for gpt-3.5-turbo (standard format)
       const standardMessages: ChatCompletionMessageParam[] = apiMessages.map(msg => {

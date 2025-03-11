@@ -2,6 +2,23 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+// Define proper types for SpeechRecognition
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onstart: (event: Event) => void;
+  onend: (event: Event) => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: Event) => void;
+}
+
 interface VoiceRecognitionProps {
   onTranscript: (text: string) => void;
   onListeningChange: (isListening: boolean) => void;
@@ -15,7 +32,7 @@ export default function useVoiceRecognition({
 }: VoiceRecognitionProps) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [recognition, setRecognition] = useState<any>(null);
+  const [recognition, setRecognition] = useState<SpeechRecognitionInstance | null>(null);
   const [temporaryTranscript, setTemporaryTranscript] = useState('');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   
@@ -23,7 +40,6 @@ export default function useVoiceRecognition({
   const onTranscriptRef = useRef(onTranscript);
   const onListeningChangeRef = useRef(onListeningChange);
   const onSpeakingChangeRef = useRef(onSpeakingChange);
-  const pauseTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Update refs when props change
   useEffect(() => {
@@ -68,8 +84,10 @@ export default function useVoiceRecognition({
   // Initialize speech recognition
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || 
-                               (window as any).webkitSpeechRecognition;
+      // Use type assertion for browser-specific API
+      const SpeechRecognition = 
+        (window as unknown as { SpeechRecognition?: { new(): SpeechRecognitionInstance } }).SpeechRecognition || 
+        (window as unknown as { webkitSpeechRecognition?: { new(): SpeechRecognitionInstance } }).webkitSpeechRecognition;
       
       if (SpeechRecognition) {
         try {
