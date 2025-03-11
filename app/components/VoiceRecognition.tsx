@@ -271,7 +271,7 @@ export default function useVoiceRecognition({
     if (!audioElement) return;
     
     try {
-      console.log('Using LMNT voice for speech');
+      console.log('Using Advanced voice for speech');
       onSpeakingChangeRef.current(true);
       
       // Notify that LMNT is loading
@@ -281,6 +281,30 @@ export default function useVoiceRecognition({
       
       // Stop any current playback
       audioElement.pause();
+      
+      // For iOS, try to unlock audio context first
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        try {
+          // Create a short silent sound and play it to unlock audio
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+          const audioCtx = new AudioContext();
+          const oscillator = audioCtx.createOscillator();
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+          oscillator.connect(audioCtx.destination);
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.01);
+          
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+          
+          console.log('iOS audio context unlocked for Advanced voice');
+        } catch (e) {
+          console.warn('Could not unlock iOS audio context:', e);
+        }
+      }
       
       // Call our API route
       const response = await fetch('/api/lmnt', {
@@ -295,7 +319,7 @@ export default function useVoiceRecognition({
       });
       
       if (!response.ok) {
-        throw new Error('Failed to generate speech with LMNT');
+        throw new Error('Failed to generate speech with Advanced voice');
       }
       
       // Get the audio blob
@@ -312,21 +336,55 @@ export default function useVoiceRecognition({
       // Set the audio source and play
       audioElement.src = audioUrl;
       
-      // Play the audio
-      const playPromise = audioElement.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.error('Error playing audio:', error);
-          onSpeakingChangeRef.current(false);
-        });
+      // For iOS, we need to handle play differently
+      if (isIOS) {
+        // Add event listeners for iOS
+        const playHandler = () => {
+          document.removeEventListener('touchend', playHandler);
+          console.log('Playing audio on iOS after user interaction');
+          audioElement.play().catch(e => console.error('iOS play error:', e));
+        };
+        
+        // Try to play immediately
+        const playPromise = audioElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.warn('iOS autoplay failed, waiting for user interaction:', error);
+            // Set up listener for next user interaction
+            document.addEventListener('touchend', playHandler, { once: true });
+          });
+        }
+      } else {
+        // Normal play for non-iOS devices
+        const playPromise = audioElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error('Error playing audio:', error);
+            onSpeakingChangeRef.current(false);
+          });
+        }
       }
     } catch (error) {
-      console.error('LMNT speech error:', error);
+      console.error('Advanced voice error:', error);
       onSpeakingChangeRef.current(false);
       
       // LMNT loading is complete (with error)
       if (onLmntLoadingChangeRef.current) {
         onLmntLoadingChangeRef.current(false);
+      }
+      
+      // Fallback to browser TTS
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        try {
+          console.log('Falling back to browser TTS');
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.onend = () => onSpeakingChangeRef.current(false);
+          utterance.onerror = () => onSpeakingChangeRef.current(false);
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          console.error('Fallback TTS error:', e);
+          onSpeakingChangeRef.current(false);
+        }
       }
     }
   }, [audioElement]);

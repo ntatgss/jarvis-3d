@@ -334,7 +334,7 @@ export default function JarvisInterface() {
              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-3.5 h-3.5">
                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
              </svg>}
-            <span>{voiceGender === "male" ? "Male Voice" : voiceGender === "female" ? "Female Voice" : "Advanced Voice (Female)"}</span>
+            <span>{voiceGender === "male" ? "Male Voice" : voiceGender === "female" ? "Female Voice" : "Advanced Voice (Lily)"}</span>
           </button>
 
           {/* LMNT voice info - only show when LMNT is selected */}
@@ -369,10 +369,10 @@ export default function JarvisInterface() {
       <div
         className="w-full relative flex-none z-10 flex items-center justify-center"
         style={{
-          height: "55vh",
-          minHeight: "250px",
+          height: "45vh", // Reduced from 55vh to give more space for chat on mobile
+          minHeight: "200px", // Reduced from 250px
           marginTop: "calc(80px + 1rem)", // Account for title height on mobile
-          marginBottom: "1rem",
+          marginBottom: "0.5rem", // Reduced from 1rem
         }}
       >
         <JarvisScene isListening={isListening} isSpeaking={isSpeaking} />
@@ -474,8 +474,8 @@ export default function JarvisInterface() {
                 </div>
               )}
 
-              {/* Conversation History */}
-              <div className="flex-grow overflow-y-auto p-3 space-y-3 max-h-[30vh] md:max-h-[300px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+              {/* Conversation History - reduced max height on mobile */}
+              <div className="flex-grow overflow-y-auto p-3 space-y-3 max-h-[25vh] md:max-h-[300px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
                 {conversationHistory.length === 0 ? (
                   <div className="text-gray-400 text-center py-8 flex flex-col items-center justify-center h-full">
                     <div className="text-5xl mb-3">👋</div>
@@ -506,16 +506,17 @@ export default function JarvisInterface() {
                 <div ref={conversationEndRef} />
               </div>
 
-              {/* Input Area */}
+              {/* Input Area - improved for mobile */}
               <div className="p-3 border-t border-gray-800">
                 <div className="flex gap-2">
                   <button
                     onClick={isListening ? stopListening : startListening}
-                    className={`flex items-center justify-center p-2 rounded-full transition-colors ${
+                    className={`flex-none flex items-center justify-center p-2 rounded-full transition-colors ${
                       isListening ? "bg-red-600 text-white" : "bg-blue-600 hover:bg-blue-500 text-white"
                     }`}
                     disabled={loading}
                     title={isListening ? "Stop listening" : "Start listening"}
+                    aria-label={isListening ? "Stop listening" : "Start listening"}
                   >
                     {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                   </button>
@@ -531,9 +532,10 @@ export default function JarvisInterface() {
                     />
                     <button
                       type="submit"
-                      className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors flex items-center justify-center"
+                      className="flex-none bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors flex items-center justify-center"
                       disabled={loading || !userMessage.trim() || isListening}
                       title="Send message"
+                      aria-label="Send message"
                     >
                       <Send className="w-5 h-5" />
                     </button>
