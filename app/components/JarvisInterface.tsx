@@ -18,7 +18,7 @@ export default function JarvisInterface() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [userMessage, setUserMessage] = useState('');
-  const [_, setJarvisResponse] = useState('');
+  const [, setJarvisResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasGreeted, setHasGreeted] = useState(false);
@@ -281,7 +281,7 @@ export default function JarvisInterface() {
     };
     
     // Chat container click handler (for mobile)
-    const handleChatContainerClick = (e: Event) => {
+    const handleChatContainerClick = () => {
       if (window.innerWidth < 768 && chatContainer.classList.contains('chat-minimized')) {
         chatContainer.classList.remove('chat-minimized');
       }
@@ -454,7 +454,7 @@ export default function JarvisInterface() {
             {conversationHistory.length === 0 ? (
               <div className="text-gray-400 text-center py-6">
                 <div className="text-3xl sm:text-5xl mb-2">👋</div>
-                <div className="text-lg sm:text-xl font-medium">Hello! I'm Jarvis</div>
+                <div className="text-lg sm:text-xl font-medium">Hello! I&apos;m Jarvis</div>
                 <div className="text-xs sm:text-sm mt-1">How can I assist you today?</div>
               </div>
             ) : (

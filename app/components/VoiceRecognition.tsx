@@ -7,6 +7,10 @@ interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
 }
 
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
 interface SpeechRecognitionInstance extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -16,7 +20,7 @@ interface SpeechRecognitionInstance extends EventTarget {
   onstart: (event: Event) => void;
   onend: (event: Event) => void;
   onresult: (event: SpeechRecognitionEvent) => void;
-  onerror: (event: Event) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
 }
 
 interface VoiceRecognitionProps {
@@ -108,7 +112,7 @@ export default function useVoiceRecognition({
             onListeningChangeRef.current(false);
           };
           
-          recognitionInstance.onresult = (event: any) => {
+          recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
             if (event.results && event.results.length > 0) {
               const result = event.results[event.results.length - 1];
               if (result.isFinal) {
@@ -120,7 +124,7 @@ export default function useVoiceRecognition({
             }
           };
           
-          recognitionInstance.onerror = (event: any) => {
+          recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
             console.error('Speech recognition error:', event.error);
             setIsListening(false);
             onListeningChangeRef.current(false);
@@ -139,12 +143,12 @@ export default function useVoiceRecognition({
       if (recognition) {
         try {
           recognition.stop();
-        } catch (e) {
+        } catch {
           // Ignore errors on cleanup
         }
       }
     };
-  }, [sendFinalTranscript]);
+  }, [sendFinalTranscript, recognition]);
 
   // Function to start listening
   const startListening = useCallback(() => {
@@ -153,7 +157,7 @@ export default function useVoiceRecognition({
         // Always stop before starting to reset any state
         try {
           recognition.stop();
-        } catch (e) {
+        } catch {
           // Ignore stop errors
         }
         
