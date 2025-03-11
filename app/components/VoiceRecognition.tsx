@@ -183,15 +183,35 @@ export default function useVoiceRecognition({
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
       
-      // Try to find a good voice from our stored voices
+      // Improved voice selection with better logging
       const availableVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
-      const preferredVoice = availableVoices.find(voice => 
-        voice.name.includes('Google') || voice.name.includes('English') || voice.name.includes('Male')
-      );
+      console.log(`Available voices: ${availableVoices.length}`);
       
+      // Try to find a good voice with more fallbacks
+      let preferredVoice = availableVoices.find(voice => 
+        voice.name.includes('Google') && voice.lang.startsWith('en')
+      );
+
+      if (!preferredVoice) {
+        preferredVoice = availableVoices.find(voice => 
+          voice.lang.startsWith('en') && (voice.name.includes('Male') || voice.name.includes('English'))
+        );
+      }
+
+      if (!preferredVoice && availableVoices.length > 0) {
+        // Fallback to any English voice
+        preferredVoice = availableVoices.find(voice => voice.lang.startsWith('en'));
+      }
+
       if (preferredVoice) {
         console.log('Using voice:', preferredVoice.name);
         utterance.voice = preferredVoice;
+      } else if (availableVoices.length > 0) {
+        // Last resort: use the first available voice
+        console.log('Using default voice:', availableVoices[0].name);
+        utterance.voice = availableVoices[0];
+      } else {
+        console.log('No voices available, using browser default');
       }
       
       utterance.onend = () => {
@@ -200,19 +220,36 @@ export default function useVoiceRecognition({
       };
       
       utterance.onerror = (event) => {
-        console.error('Speech synthesis error:', event);
+        // Improved error logging with more details
+        console.error('Speech synthesis error:', {
+          error: event.error,
+          name: event.name,
+          timeStamp: event.timeStamp,
+          type: event.type
+        });
         onSpeakingChangeRef.current(false);
       };
       
       // Cancel any previous speech
       window.speechSynthesis.cancel();
       
-      // Then speak the new text
+      // Check if synthesis is paused (common Chrome issue)
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      
+      // Then speak the new text with better error handling
       setTimeout(() => {
-        window.speechSynthesis.speak(utterance);
-      }, 100);
+        try {
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          console.error('Error during speak call:', e);
+          onSpeakingChangeRef.current(false);
+        }
+      }, 250); // Longer timeout to ensure cancel completes
     } else {
       console.error('Speech synthesis not supported in this browser');
+      onSpeakingChangeRef.current(false);
     }
   }, [voices]);
 
