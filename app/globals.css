@@ -294,22 +294,38 @@ canvas,
 @media (min-width: 768px) {
   .desktop-minimized {
     max-height: 60px !important;
+    min-height: 60px !important;
+    height: 60px !important;
     overflow: hidden;
-    transform: translateY(calc(100% - 60px));
+    width: 300px !important;
+    border-radius: 0.75rem !important;
+    background-color: rgba(10, 10, 10, 0.8) !important;
+    backdrop-filter: blur(10px) !important;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+    cursor: pointer;
     transition: all 0.3s ease;
     opacity: 0.9;
-    border-top-left-radius: 0.75rem;
-    border-top-right-radius: 0.75rem;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
-    cursor: pointer;
+    animation: none !important; /* Disable pulsing animation */
+    border: 1px solid rgba(0, 99, 255, 0.3) !important;
   }
   
   .desktop-minimized:hover {
     opacity: 1;
-    transform: translateY(calc(100% - 80px));
-    box-shadow: 0 -5px 20px rgba(0, 99, 255, 0.3);
+    box-shadow: 0 5px 20px rgba(0, 99, 255, 0.3) !important;
+    border: 1px solid rgba(0, 99, 255, 0.5) !important;
+    transform: translateY(-2px);
+  }
+  
+  /* Override mobile styling for desktop */
+  .md\:chat-not-minimized {
+    height: auto !important;
+    width: auto !important;
+    position: absolute !important;
+    bottom: 1rem !important;
+    right: 1rem !important;
+    border-radius: 0.75rem !important;
+    animation: none !important;
+    display: flex !important;
   }
   
   .desktop-minimized .desktop-chat-header {

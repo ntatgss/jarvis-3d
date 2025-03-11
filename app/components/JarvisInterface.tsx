@@ -323,17 +323,23 @@ export default function JarvisInterface() {
     
     // Toggle body class for global styling
     if (typeof document !== 'undefined') {
+      // Check if we're on mobile or desktop
+      const isMobile = window.innerWidth < 768;
+      
       if (newMinimizedState) {
         document.body.classList.add('chat-is-minimized');
         
-        // Force a small delay to ensure styles are applied
-        setTimeout(() => {
-          const chatButton = document.querySelector('.fixed-chat-button');
-          if (chatButton) {
-            (chatButton as HTMLElement).style.display = 'flex';
-            (chatButton as HTMLElement).style.opacity = '1';
-          }
-        }, 50);
+        // Only show the fixed chat button on mobile
+        if (isMobile) {
+          // Force a small delay to ensure styles are applied
+          setTimeout(() => {
+            const chatButton = document.querySelector('.fixed-chat-button');
+            if (chatButton) {
+              (chatButton as HTMLElement).style.display = 'flex';
+              (chatButton as HTMLElement).style.opacity = '1';
+            }
+          }, 50);
+        }
       } else {
         document.body.classList.remove('chat-is-minimized');
       }
@@ -408,7 +414,10 @@ export default function JarvisInterface() {
                voiceGender === "female" ? "Female Voice" : 
                "Advanced Voice"}
             </span>
-            {typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && voiceGender === "female" && (
+            {typeof navigator !== 'undefined' && 
+             /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && 
+             !(/Macintosh/i.test(navigator.userAgent) && /Safari/i.test(navigator.userAgent)) && 
+             voiceGender === "female" && (
               <span className="text-xs opacity-75 ml-1">(Advanced not available on mobile)</span>
             )}
           </button>
@@ -518,7 +527,9 @@ export default function JarvisInterface() {
         {/* Main chat container */}
         <div
           className={`chat-container transition-all duration-300 ${
-            isChatMinimized ? "hidden md:flex md:max-w-[300px] md:h-[50px] md:overflow-hidden" : "md:max-w-md md:h-auto"
+            isChatMinimized 
+              ? "chat-minimized md:desktop-minimized md:chat-not-minimized md:w-[300px]" 
+              : "md:max-w-md md:h-auto"
           } bg-gray-900/80 backdrop-blur-md rounded-xl shadow-xl border border-gray-800 w-full md:absolute md:bottom-4 md:right-4 flex flex-col ${
             isChatMinimized && "md:cursor-pointer"
           }`}
@@ -529,9 +540,9 @@ export default function JarvisInterface() {
           }}
         >
           {/* Chat header */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-800">
+          <div className={`flex items-center justify-between p-3 ${isChatMinimized ? "md:border-none md:bg-gray-800/50" : "border-b border-gray-800"}`}>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              <div className={`w-2 h-2 rounded-full ${isChatMinimized ? "bg-blue-500 animate-pulse" : "bg-green-500"}`}></div>
               <h2 className="font-medium text-gray-200">Jarvis Chat</h2>
             </div>
             <button
@@ -546,107 +557,110 @@ export default function JarvisInterface() {
             </button>
           </div>
 
-          {!isChatMinimized && (
-            <>
-              {/* Error message - improved for mobile */}
-              {error && (
-                <div className="bg-red-500/90 text-white p-2 mx-2 my-1 rounded-lg backdrop-blur-sm text-sm">
-                  <div className="flex items-center gap-2">
-                    <X className="w-4 h-4 flex-shrink-0" />
-                    <span className="line-clamp-2">{error}</span>
+          {/* Chat content - hidden when minimized */}
+          <div className={`flex-1 flex flex-col ${isChatMinimized ? "hidden" : "block"}`}>
+            {!isChatMinimized && (
+              <>
+                {/* Error message - improved for mobile */}
+                {error && (
+                  <div className="bg-red-500/90 text-white p-2 mx-2 my-1 rounded-lg backdrop-blur-sm text-sm">
+                    <div className="flex items-center gap-2">
+                      <X className="w-4 h-4 flex-shrink-0" />
+                      <span className="line-clamp-2">{error}</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Conversation History - adjusted for better mobile experience */}
-              <div 
-                className="flex-grow overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
-                style={{
-                  maxHeight: error ? "calc(25vh - 40px)" : "25vh", // Reduce height when error is present
-                  minHeight: "80px" // Ensure minimum height
-                }}
-              >
-                {conversationHistory.length === 0 ? (
-                  <div className="text-gray-400 text-center py-8 flex flex-col items-center justify-center h-full">
-                    <div className="text-5xl mb-3">👋</div>
-                    <div className="text-xl font-medium text-gray-300">Hello! I'm Jarvis</div>
-                    <div className="text-sm mt-1 max-w-xs">
-                      Ask me anything or use the microphone button to speak with me
-                    </div>
-                    <div className="text-xs mt-2 text-blue-400">
-                      I can both text AND speak to you with my voice synthesis
-                    </div>
-                  </div>
-                ) : (
-                  conversationHistory.map((msg, index) => (
-                    <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[85%] px-4 py-2 rounded-2xl shadow-md ${
-                          msg.role === "user"
-                            ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-tr-none"
-                            : "bg-gray-800 text-gray-200 rounded-tl-none border border-gray-700"
-                        }`}
-                      >
-                        <div className="text-xs font-medium mb-1 flex justify-between items-center gap-2">
-                          <span>{msg.role === "user" ? "You" : "Jarvis"}</span>
-                          <span className="text-gray-400">{formatTime(msg.timestamp)}</span>
-                        </div>
-                        <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                {/* Conversation History - adjusted for better mobile experience */}
+                <div 
+                  className="flex-grow overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+                  style={{
+                    maxHeight: error ? "calc(25vh - 40px)" : "25vh", // Reduce height when error is present
+                    minHeight: "80px" // Ensure minimum height
+                  }}
+                >
+                  {conversationHistory.length === 0 ? (
+                    <div className="text-gray-400 text-center py-8 flex flex-col items-center justify-center h-full">
+                      <div className="text-5xl mb-3">👋</div>
+                      <div className="text-xl font-medium text-gray-300">Hello! I'm Jarvis</div>
+                      <div className="text-sm mt-1 max-w-xs">
+                        Ask me anything or use the microphone button to speak with me
+                      </div>
+                      <div className="text-xs mt-2 text-blue-400">
+                        I can both text AND speak to you with my voice synthesis
                       </div>
                     </div>
-                  ))
-                )}
-                <div ref={conversationEndRef} />
-              </div>
-
-              {/* Input Area - fixed for mobile to ensure it's always accessible */}
-              <div className="p-2 border-t border-gray-800 sticky-bottom">
-                <div className="flex gap-2">
-                  <button
-                    onClick={isListening ? stopListening : startListening}
-                    className={`flex-none flex items-center justify-center p-2 rounded-full transition-colors ${
-                      isListening ? "bg-red-600 text-white" : "bg-blue-600 hover:bg-blue-500 text-white"
-                    }`}
-                    disabled={loading}
-                    title={isListening ? "Stop listening" : "Start listening"}
-                    aria-label={isListening ? "Stop listening" : "Start listening"}
-                  >
-                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                  </button>
-
-                  <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type your message... (I can speak too!)"
-                      className="flex-1 py-2 px-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      value={userMessage}
-                      onChange={handleInputChange}
-                      disabled={loading || isListening}
-                    />
-                    <button
-                      type="submit"
-                      className="flex-none bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors flex items-center justify-center"
-                      disabled={loading || !userMessage.trim() || isListening}
-                      title="Send message"
-                      aria-label="Send message"
-                    >
-                      <Send className="w-5 h-5" />
-                    </button>
-                  </form>
+                  ) : (
+                    conversationHistory.map((msg, index) => (
+                      <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`max-w-[85%] px-4 py-2 rounded-2xl shadow-md ${
+                            msg.role === "user"
+                              ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-tr-none"
+                              : "bg-gray-800 text-gray-200 rounded-tl-none border border-gray-700"
+                          }`}
+                        >
+                          <div className="text-xs font-medium mb-1 flex justify-between items-center gap-2">
+                            <span>{msg.role === "user" ? "You" : "Jarvis"}</span>
+                            <span className="text-gray-400">{formatTime(msg.timestamp)}</span>
+                          </div>
+                          <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div ref={conversationEndRef} />
                 </div>
-              </div>
 
-              {/* Loading overlay - improved for mobile */}
-              {loading && (
-                <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm flex items-center justify-center rounded-xl z-20 pointer-events-none">
-                  <div className="text-center">
-                    <div className="w-12 h-12 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                    <p className="text-blue-400 font-medium text-sm">Jarvis is thinking...</p>
+                {/* Input Area - fixed for mobile to ensure it's always accessible */}
+                <div className="p-2 border-t border-gray-800 sticky-bottom">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={isListening ? stopListening : startListening}
+                      className={`flex-none flex items-center justify-center p-2 rounded-full transition-colors ${
+                        isListening ? "bg-red-600 text-white" : "bg-blue-600 hover:bg-blue-500 text-white"
+                      }`}
+                      disabled={loading}
+                      title={isListening ? "Stop listening" : "Start listening"}
+                      aria-label={isListening ? "Stop listening" : "Start listening"}
+                    >
+                      {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+
+                    <form onSubmit={handleTextSubmit} className="flex-1 flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Type your message... (I can speak too!)"
+                        className="flex-1 py-2 px-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        value={userMessage}
+                        onChange={handleInputChange}
+                        disabled={loading || isListening}
+                      />
+                      <button
+                        type="submit"
+                        className="flex-none bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors flex items-center justify-center"
+                        disabled={loading || !userMessage.trim() || isListening}
+                        title="Send message"
+                        aria-label="Send message"
+                      >
+                        <Send className="w-5 h-5" />
+                      </button>
+                    </form>
                   </div>
                 </div>
-              )}
-            </>
-          )}
+
+                {/* Loading overlay - improved for mobile */}
+                {loading && (
+                  <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm flex items-center justify-center rounded-xl z-20 pointer-events-none">
+                    <div className="text-center">
+                      <div className="w-12 h-12 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                      <p className="text-blue-400 font-medium text-sm">Jarvis is thinking...</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

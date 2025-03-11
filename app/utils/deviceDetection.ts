@@ -7,7 +7,13 @@
  */
 export const isMobileDevice = (): boolean => {
   if (typeof navigator === 'undefined') return false;
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
+  // Check if it's a mobile device but exclude Mac Safari
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMacSafari = /Macintosh/i.test(navigator.userAgent) && /Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent);
+  
+  // Return true only if it's a mobile device and not Mac Safari
+  return isMobile && !isMacSafari;
 };
 
 /**
